@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.tools/
+art/*.blend1
+docs/captures/
+test-results/
+*.log
