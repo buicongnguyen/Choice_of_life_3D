@@ -1,0 +1,836 @@
+import * as T from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { chapters, careerFor } from "./content";
+import { resolved, chapterDone, type Life } from "./core";
+
+type Collider = { x: number; z: number; w: number; d: number };
+export type Place = {
+  id: string;
+  label: string;
+  x: number;
+  z: number;
+  kind: "person" | "discovery" | "exit";
+  index: number;
+};
+type Actor = {
+  root: T.Group;
+  limbs: (T.Object3D | undefined)[];
+  head: T.Object3D | undefined;
+  scale: number;
+};
+const palette = { health: 0xdc8b79, happiness: 0xe7b75a, money: 0x77aba0 };
+const material = (color: number) =>
+  new T.MeshStandardMaterial({ color, roughness: 0.8 });
+const modelURL = (name: string) => `${import.meta.env.BASE_URL}models/${name}`;
+const props = [
+  ["blanket", "rattle", "coins"],
+  ["apple", "boat", "coins"],
+  ["apple", "book", "coins"],
+  ["ball", "letter", "coins"],
+  ["apple", "letter", "coins"],
+  ["plant", "book", "coins"],
+  ["apple", "letter", "coins"],
+  ["plant", "book", "coins"],
+  ["blanket", "letter", "book"],
+  ["apple", "letter", "coins"],
+  ["plant", "book", "coins"],
+  ["plant", "tin", "coins"],
+];
+
+export class World {
+  readonly renderer: T.WebGLRenderer;
+  readonly scene = new T.Scene();
+  readonly camera = new T.OrthographicCamera(-10, 10, 7, -7, 0.1, 100);
+  readonly playerPosition = new T.Vector3(0, 0.16, 2.6);
+  private loader = new GLTFLoader();
+  private models = new Map<string, Promise<T.Group>>();
+  private room = new T.Group();
+  private cast = new T.Group();
+  private fx = new T.Group();
+  private player?: Actor;
+  private actors: Actor[] = [];
+  private points: { place: Place; root: T.Group; marker: T.Sprite }[] = [];
+  private colliders: Collider[] = [];
+  private bounds: Record<string, Collider[]> = {};
+  private state?: Life;
+  private generation = 0;
+  private target: T.Vector3[] = [];
+  private pending: string | null = null;
+  private raycaster = new T.Raycaster();
+  private ground = new T.Plane(new T.Vector3(0, 1, 0), -0.16);
+  private clock = 0;
+  private accumulator = 0;
+  private last = 0;
+  private frame = 0;
+  private keys = new Set<string>();
+  private touch = { x: 0, y: 0 };
+  private walking = false;
+  private obstacle?: T.Mesh;
+  private sparkle?: T.Points;
+  private observer: ResizeObserver;
+  active = false;
+  reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  speed = 2.6;
+  onInteract: (id: string) => void = () => {};
+  onNearby: (place: Place | undefined) => void = () => {};
+  onHazard: () => void = () => {};
+  onPosition: () => void = () => {};
+  private lastNearby = "";
+  private timeToSave = 0;
+
+  constructor(private host: HTMLElement) {
+    this.renderer = new T.WebGLRenderer({
+      antialias: true,
+      alpha: true,
+      powerPreference: "high-performance",
+    });
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = T.PCFSoftShadowMap;
+    this.renderer.outputColorSpace = T.SRGBColorSpace;
+    this.renderer.toneMapping = T.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.35;
+    host.append(this.renderer.domElement);
+    this.renderer.domElement.setAttribute("aria-hidden", "true");
+    this.camera.position.set(10, 14, 18);
+    this.camera.lookAt(0, 0.2, 0);
+    this.scene.add(new T.HemisphereLight(0xfff4da, 0x8faba2, 2.5));
+    const sun = new T.DirectionalLight(0xffe3b0, 3.8);
+    sun.position.set(-5, 12, 6);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.camera.left = -10;
+    sun.shadow.camera.right = 10;
+    sun.shadow.camera.top = 10;
+    sun.shadow.camera.bottom = -10;
+    sun.shadow.normalBias = 0.045;
+    sun.shadow.bias = -0.0002;
+    this.scene.add(sun);
+    const fill = new T.DirectionalLight(0xc8eaff, 1.2);
+    fill.position.set(6, 6, -5);
+    this.scene.add(fill);
+    const under = new T.Mesh(
+      new T.CircleGeometry(11, 64),
+      new T.MeshBasicMaterial({
+        color: 0x79988b,
+        transparent: true,
+        opacity: 0.12,
+      }),
+    );
+    under.rotation.x = -Math.PI / 2;
+    under.position.y = -0.71;
+    this.scene.add(under);
+    this.scene.add(this.room, this.cast, this.fx);
+    this.observer = new ResizeObserver(() => this.resize());
+    this.observer.observe(host);
+    this.resize();
+    this.renderer.domElement.addEventListener("pointerup", (event) => {
+      if (!this.active || event.button !== 0) return;
+      this.tap(event.clientX, event.clientY);
+    });
+    this.frame = requestAnimationFrame(this.tick);
+  }
+  async init() {
+    const response = await fetch(modelURL("colliders.json"));
+    if (!response.ok) throw new Error("The world map could not be loaded.");
+    this.bounds = await response.json();
+    await Promise.all(
+      ["male", "female", "baby", "cat", "home"].map((n) => this.load(n)),
+    );
+  }
+  private load(name: string) {
+    if (!this.models.has(name))
+      this.models.set(
+        name,
+        this.loader
+          .loadAsync(modelURL(`${name}.glb`))
+          .then((g) => g.scene)
+          .catch((e) => {
+            this.models.delete(name);
+            throw e;
+          }),
+      );
+    return this.models.get(name)!;
+  }
+  private clone(model: T.Group) {
+    const root = model.clone(true);
+    root.traverse((o) => {
+      if (o instanceof T.Mesh) {
+        o.castShadow = true;
+        o.receiveShadow = true;
+        if (Array.isArray(o.material))
+          o.material = o.material.map((m) => m.clone());
+        else o.material = o.material.clone();
+      }
+    });
+    return root;
+  }
+  private makeActor(
+    model: T.Group,
+    scale: number,
+    color: number,
+    skin: number,
+    hair: number,
+  ): Actor {
+    const root = this.clone(model);
+    root.scale.setScalar(scale);
+    root.traverse((o) => {
+      if (o instanceof T.Mesh) {
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        for (const m of mats) {
+          if (m instanceof T.MeshStandardMaterial) {
+            if (m.name.startsWith("teal")) m.color.set(color);
+            if (m.name.startsWith("skin")) m.color.set(skin);
+            if (m.name.startsWith("hair")) m.color.set(hair);
+          }
+        }
+      }
+    });
+    return {
+      root,
+      limbs: ["ArmL", "ArmR", "LegL", "LegR"].map((n) =>
+        root.getObjectByName(n),
+      ),
+      head: root.getObjectByName("Head"),
+      scale,
+    };
+  }
+  private release(group: T.Group) {
+    group.traverse((o) => {
+      if (
+        o instanceof T.Mesh ||
+        o instanceof T.Sprite ||
+        o instanceof T.Points
+      ) {
+        const ms = Array.isArray(o.material) ? o.material : [o.material];
+        for (const m of ms) {
+          if (m instanceof T.SpriteMaterial) m.map?.dispose();
+          m.dispose();
+        }
+        if (o.userData.ownedGeometry) o.geometry?.dispose();
+      }
+    });
+    group.clear();
+  }
+  async show(state: Life) {
+    const ticket = ++this.generation;
+    this.active = false;
+    this.clearInput();
+    this.target = [];
+    this.pending = null;
+    const chapter = chapters[state.chapter];
+    const [scenery, body, male, female, cat, ...items] = await Promise.all([
+      this.load(chapter.scene),
+      this.load(state.chapter === 0 ? "baby" : state.identity.gender),
+      this.load("male"),
+      this.load("female"),
+      this.load("cat"),
+      ...props[state.chapter].map((n) => this.load(n)),
+    ]);
+    if (ticket !== this.generation) return;
+    this.release(this.room);
+    this.release(this.cast);
+    this.release(this.fx);
+    this.points = [];
+    this.actors = [];
+    this.obstacle = undefined;
+    this.sparkle = undefined;
+    this.room.add(this.clone(scenery));
+    this.colliders = this.bounds[chapter.scene] ?? [];
+    this.state = state;
+    const skins = [0xe4ad7d, 0xf1c6a1, 0xab7050, 0x754933];
+    let shirt = 0x4a9990;
+    if (state.chapter >= 6) {
+      shirt =
+        state.facts.field === "care"
+          ? 0xf4eee2
+          : state.facts.field === "technology"
+            ? 0x578ba8
+            : 0xc48d70;
+    }
+    this.player = this.makeActor(
+      body,
+      chapter.scale,
+      shirt,
+      skins[state.identity.skin],
+      state.chapter >= 10 ? 0xd5d5cd : 0x47332d,
+    );
+    this.playerPosition.set(
+      state.position.x,
+      this.surface(state.position.x, state.position.z) - 0.03 * chapter.scale,
+      state.position.z,
+    );
+    this.player.root.position.copy(this.playerPosition);
+    this.cast.add(this.player.root);
+    if (state.chapter >= 6 && state.chapter <= 9)
+      this.accessory(this.player.root, careerFor(state.facts));
+    const ring = new T.Mesh(
+      new T.RingGeometry(0.34, 0.41, 36),
+      new T.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.8,
+        side: T.DoubleSide,
+      }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.04;
+    ring.userData.ownedGeometry = true;
+    this.player.root.add(ring);
+    chapter.encounters.forEach((enc, i) => {
+      const isPeer =
+        ["Rowan", "Maya"].includes(enc.person) && state.chapter < 5;
+      const scale = isPeer ? chapter.scale : state.chapter >= 10 ? 0.96 : 1;
+      const adult =
+        state.chapter >= 10 ||
+        ((enc.person === "Mum" || enc.person === "Dad") && state.chapter >= 7);
+      const identityHash = [...enc.person].reduce(
+        (n, c) => n + c.charCodeAt(0),
+        0,
+      );
+      const actor = this.makeActor(
+        enc.gender === "female" ? female : male,
+        scale,
+        enc.color,
+        [0xe4ad7d, 0xc18c65, 0xf1c6a1, 0xab7050][identityHash % 4],
+        adult ? 0xd2d0c7 : [0x4e372d, 0x614737, 0x2d2928][identityHash % 3],
+      );
+      const x = i === 0 ? -2.2 : 2.2,
+        z = i === 0 ? -0.7 : -1.25;
+      actor.root.position.set(x, this.surface(x, z) - 0.03 * scale, z);
+      actor.root.rotation.y = i === 0 ? 0.5 : -0.3;
+      this.cast.add(actor.root);
+      this.actors.push(actor);
+      this.addPoint(
+        {
+          id: `person:${i}`,
+          label: enc.person,
+          x,
+          z,
+          kind: "person",
+          index: i,
+        },
+        actor.root,
+        2.8 * scale,
+      );
+    });
+    if (state.chapter === 7) {
+      const names = ["Avery", "Quinn", "Morgan"];
+      const colors = [0x7499bb, 0xb98298, 0xe4b451];
+      names.forEach((name, i) => {
+        const a = this.makeActor(
+          state.identity.gender === "male" ? female : male,
+          0.91,
+          colors[i],
+          skins[(state.identity.skin + i + 1) % 4],
+          [0x4c3329, 0x332829, 0x965c36][i],
+        );
+        a.root.position.set(
+          -2 + i * 2,
+          this.surface(-2 + i * 2, 2.8) - 0.03 * 0.91,
+          2.8,
+        );
+        a.root.rotation.y = Math.PI;
+        this.cast.add(a.root);
+        this.actors.push(a);
+        const label = this.label(name, 0xffffff, 0x214d48);
+        label.position.y = 2.8;
+        a.root.add(label);
+      });
+    }
+    const coords = [
+      [-3.1, 0.9],
+      [0, 1.6],
+      [3.3, 0.6],
+    ];
+    chapter.discoveries.forEach((label, i) => {
+      const root = new T.Group();
+      const [x, z] = coords[i];
+      root.position.set(x, 0.17, z);
+      const color = Object.values(palette)[i];
+      const gem = this.clone(items[i]);
+      gem.position.y = 0.18;
+      root.add(gem);
+      const halo = new T.Mesh(
+        new T.RingGeometry(0.31, 0.35, 32),
+        new T.MeshBasicMaterial({ color, side: T.DoubleSide }),
+      );
+      halo.rotation.x = -Math.PI / 2;
+      halo.position.y = 0.035;
+      halo.userData.ownedGeometry = true;
+      root.add(halo);
+      this.fx.add(root);
+      this.addPoint(
+        { id: `discovery:${i}`, label, x, z, kind: "discovery", index: i },
+        root,
+        1.05,
+      );
+    });
+    const exit = new T.Group();
+    exit.position.set(5.2, 0.17, -0.3);
+    const arch = new T.Mesh(
+      new T.TorusGeometry(0.53, 0.06, 8, 32, Math.PI),
+      material(0xe9b74f),
+    );
+    arch.position.y = 0.9;
+    arch.userData.ownedGeometry = true;
+    exit.add(arch);
+    for (const x of [-0.53, 0.53]) {
+      const post = new T.Mesh(
+        new T.CylinderGeometry(0.06, 0.06, 0.9, 8),
+        material(0xe9b74f),
+      );
+      post.position.set(x, 0.45, 0);
+      post.userData.ownedGeometry = true;
+      exit.add(post);
+    }
+    this.fx.add(exit);
+    this.addPoint(
+      {
+        id: "exit",
+        label: state.chapter === 11 ? "Your story" : "Next chapter",
+        x: 5.2,
+        z: -0.3,
+        kind: "exit",
+        index: 0,
+      },
+      exit,
+      1.8,
+    );
+    if (state.chapter > 1 && state.chapter < 10) {
+      this.obstacle = new T.Mesh(
+        new T.SphereGeometry(0.4, 16, 8),
+        new T.MeshStandardMaterial({
+          color: 0x847b9f,
+          transparent: true,
+          opacity: 0.55,
+          roughness: 1,
+        }),
+      );
+      this.obstacle.scale.set(1, 0.09, 1);
+      this.obstacle.position.set(0, 0.19, 0.2);
+      this.obstacle.userData.ownedGeometry = true;
+      this.fx.add(this.obstacle);
+    }
+    if (state.chapter > 0) {
+      const pet = this.clone(cat);
+      pet.scale.setScalar(0.7);
+      pet.position.set(-3.4, 0.17, -1.6);
+      pet.rotation.y = 0.8;
+      this.cast.add(pet);
+    }
+    const positions = new Float32Array(30 * 3);
+    for (let i = 0; i < positions.length; i += 3) {
+      positions[i] = Math.sin(i * 5.7) * 6;
+      positions[i + 1] = 0.8 + (i % 9) / 4;
+      positions[i + 2] = Math.cos(i * 3.2) * 4;
+    }
+    const geometry = new T.BufferGeometry();
+    geometry.setAttribute("position", new T.BufferAttribute(positions, 3));
+    this.sparkle = new T.Points(
+      geometry,
+      new T.PointsMaterial({
+        color: 0xfff6cd,
+        size: 0.035,
+        transparent: true,
+        opacity: 0.6,
+      }),
+    );
+    this.sparkle.userData.ownedGeometry = true;
+    this.fx.add(this.sparkle);
+    this.update(state);
+    this.resize();
+    this.renderer.render(this.scene, this.camera);
+    const next = chapters[state.chapter + 1];
+    if (next) void this.load(next.scene).catch(() => {});
+  }
+  private accessory(root: T.Group, career: string) {
+    if (/doctor|nurse|Care assistant/i.test(career)) {
+      const loop = new T.Mesh(
+        new T.TorusGeometry(0.14, 0.025, 6, 16, Math.PI),
+        material(0x374953),
+      );
+      loop.position.set(0, 1.23, 0.245);
+      loop.rotation.z = Math.PI;
+      loop.userData.ownedGeometry = true;
+      root.add(loop);
+      const badge = new T.Mesh(
+        new T.BoxGeometry(0.1, 0.14, 0.03),
+        material(0xffffff),
+      );
+      badge.position.set(-0.18, 1.1, 0.25);
+      badge.userData.ownedGeometry = true;
+      root.add(badge);
+    } else {
+      const badge = new T.Mesh(
+        new T.BoxGeometry(0.12, 0.17, 0.025),
+        material(0xf8efdb),
+      );
+      badge.position.set(-0.15, 1.12, 0.255);
+      badge.userData.ownedGeometry = true;
+      root.add(badge);
+    }
+  }
+  private label(text: string, bg: number, fg: number) {
+    const c = document.createElement("canvas");
+    c.width = 320;
+    c.height = 72;
+    const ctx = c.getContext("2d")!;
+    ctx.fillStyle = `#${bg.toString(16).padStart(6, "0")}`;
+    ctx.beginPath();
+    ctx.roundRect(2, 2, 316, 68, 30);
+    ctx.fill();
+    ctx.font = "600 27px system-ui";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = `#${fg.toString(16).padStart(6, "0")}`;
+    ctx.fillText(text, 160, 36, 295);
+    const texture = new T.CanvasTexture(c);
+    texture.colorSpace = T.SRGBColorSpace;
+    const sprite = new T.Sprite(
+      new T.SpriteMaterial({
+        map: texture,
+        depthTest: false,
+        toneMapped: false,
+      }),
+    );
+    sprite.scale.set(1.9, 0.43, 1);
+    sprite.renderOrder = 10;
+    return sprite;
+  }
+  private addPoint(place: Place, root: T.Group, height: number) {
+    const marker = this.label(
+      place.kind === "person"
+        ? `${place.label} · talk`
+        : place.kind === "exit"
+          ? place.label
+          : ["♥ Health", "✦ Joy", "● Money"][place.index],
+      place.kind === "person" ? 0xfff7e6 : 0x214d48,
+      place.kind === "person" ? 0x214d48 : 0xfff7e6,
+    );
+    marker.position.y = height;
+    root.add(marker);
+    root.traverse((o) => (o.userData.place = place.id));
+    this.points.push({ place, root, marker });
+  }
+  update(state: Life) {
+    this.state = state;
+    for (const { place, root, marker } of this.points) {
+      if (place.kind === "discovery")
+        root.visible = !state.discoveries.includes(
+          `${state.chapter}:${place.index}`,
+        );
+      if (place.kind === "person")
+        marker.material.opacity = resolved(state, place.index) ? 0.45 : 1;
+      if (place.kind === "exit") {
+        root.visible = chapterDone(state);
+      }
+    }
+    if (this.obstacle)
+      this.obstacle.visible = !state.hazards.includes(state.chapter);
+  }
+  places() {
+    return this.points
+      .filter(
+        (p) =>
+          p.root.visible &&
+          (p.place.kind !== "person" ||
+            !this.state ||
+            !resolved(this.state, p.place.index)),
+      )
+      .map((p) => p.place);
+  }
+  nearest() {
+    let result: Place | undefined,
+      distance = 1.55;
+    for (const place of this.places()) {
+      const d = Math.hypot(
+        place.x - this.playerPosition.x,
+        place.z - this.playerPosition.z,
+      );
+      if (d < distance) {
+        result = place;
+        distance = d;
+      }
+    }
+    return result;
+  }
+  interact() {
+    const p = this.nearest();
+    if (this.active && p) {
+      this.target = [];
+      this.pending = null;
+      this.onInteract(p.id);
+    }
+  }
+  key(key: string, down: boolean) {
+    if (down) {
+      this.keys.add(key);
+      this.target = [];
+      this.pending = null;
+    } else this.keys.delete(key);
+  }
+  pad(x: number, y: number) {
+    this.touch = { x, y };
+    if (x || y) {
+      this.target = [];
+      this.pending = null;
+    }
+  }
+  clearInput() {
+    this.keys.clear();
+    this.touch = { x: 0, y: 0 };
+    this.target = [];
+    this.pending = null;
+    this.walking = false;
+  }
+  private surface(x: number, z: number) {
+    const scene = this.state ? chapters[this.state.chapter].scene : "home";
+    if (scene === "home")
+      return Math.abs(x) < 2.85 && Math.abs(z) < 2 ? 0.16 : 0.1;
+    if (scene === "school" || scene === "campus")
+      return Math.abs(x) < 2.75 && Math.abs(z) < 1.75 ? 0.15 : 0.1;
+    if (scene === "office")
+      return Math.abs(x) < 2.9 && Math.abs(z) < 2 ? 0.15 : 0.1;
+    return Math.abs(x) < 5.4 && Math.abs(z - 0.25) < 0.85
+      ? 0.105
+      : Math.abs(z - 1.65) < 0.28
+        ? 0.14
+        : 0.06;
+  }
+  private free(x: number, z: number) {
+    return (
+      Math.abs(x) < 5.85 &&
+      Math.abs(z) < 4.05 &&
+      !this.colliders.some(
+        (c) =>
+          Math.abs(x - c.x) < c.w / 2 + 0.24 &&
+          Math.abs(z - c.z) < c.d / 2 + 0.24,
+      )
+    );
+  }
+  private path(x: number, z: number) {
+    const step = 0.35;
+    const grid = (v: number) => Math.round(v / step);
+    const start = [grid(this.playerPosition.x), grid(this.playerPosition.z)],
+      end = [grid(x), grid(z)];
+    const key = (a: number, b: number) => `${a},${b}`;
+    const first = key(...(start as [number, number])),
+      last = key(...(end as [number, number]));
+    const previous = new Map<string, string | null>([[first, null]]),
+      queue = [start];
+    let found: string | undefined;
+    for (let i = 0; i < queue.length && i < 2500; i++) {
+      const [a, b] = queue[i],
+        k = key(a, b);
+      if (k === last) {
+        found = k;
+        break;
+      }
+      for (const [dx, dz] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ]) {
+        const nx = a + dx,
+          nz = b + dz,
+          nk = key(nx, nz);
+        if (!previous.has(nk) && this.free(nx * step, nz * step)) {
+          previous.set(nk, k);
+          queue.push([nx, nz]);
+        }
+      }
+    }
+    if (!found) return [];
+    const route: T.Vector3[] = [];
+    for (
+      let k: string | null = found;
+      k && k !== first;
+      k = previous.get(k) ?? null
+    ) {
+      const [a, b] = k.split(",").map(Number);
+      route.unshift(new T.Vector3(a * step, 0.17, b * step));
+    }
+    return route;
+  }
+  go(id: string) {
+    const p = this.places().find((p) => p.id === id);
+    if (!p) return false;
+    this.target = this.path(p.x, p.z);
+    this.pending = id;
+    return this.target.length > 0 || this.nearest()?.id === id;
+  }
+  private tap(x: number, y: number) {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.raycaster.setFromCamera(
+      new T.Vector2(
+        ((x - rect.left) / rect.width) * 2 - 1,
+        (-(y - rect.top) / rect.height) * 2 + 1,
+      ),
+      this.camera,
+    );
+    const hits = this.raycaster.intersectObjects(
+      [...this.cast.children, ...this.fx.children],
+      true,
+    );
+    const hit = hits.find(
+      (h) =>
+        h.object.userData.place &&
+        this.places().some((p) => p.id === h.object.userData.place),
+    );
+    if (hit) {
+      this.go(hit.object.userData.place);
+      return;
+    }
+    const position = new T.Vector3();
+    if (
+      this.raycaster.ray.intersectPlane(this.ground, position) &&
+      this.free(position.x, position.z)
+    ) {
+      this.target = this.path(position.x, position.z);
+      this.pending = null;
+    }
+  }
+  resize() {
+    const w = this.host.clientWidth,
+      h = this.host.clientHeight;
+    if (!w || !h) return;
+    this.renderer.setSize(w, h);
+    const aspect = w / h;
+    const span = Math.max(10.8, 17.8 / aspect);
+    this.camera.left = (-span * aspect) / 2;
+    this.camera.right = (span * aspect) / 2;
+    this.camera.top = span / 2;
+    this.camera.bottom = -span / 2;
+    this.camera.updateProjectionMatrix();
+  }
+  private step(dt: number) {
+    if (!this.active || !this.player) return;
+    this.clock += dt;
+    let sx =
+      this.touch.x +
+      (this.keys.has("d") || this.keys.has("ArrowRight") ? 1 : 0) -
+      (this.keys.has("a") || this.keys.has("ArrowLeft") ? 1 : 0);
+    let sy =
+      this.touch.y +
+      (this.keys.has("s") || this.keys.has("ArrowDown") ? 1 : 0) -
+      (this.keys.has("w") || this.keys.has("ArrowUp") ? 1 : 0);
+    const direction = new T.Vector3(
+      sx * 0.874 + sy * 0.486,
+      0,
+      -sx * 0.486 + sy * 0.874,
+    );
+    if (direction.lengthSq() === 0 && this.target.length) {
+      direction.subVectors(this.target[0], this.playerPosition);
+      direction.y = 0;
+      if (direction.length() < 0.09) {
+        this.target.shift();
+        direction.set(0, 0, 0);
+      }
+    }
+    this.walking = direction.lengthSq() > 0.0001;
+    if (this.walking) {
+      direction.normalize();
+      const amount = this.speed * dt;
+      const x = this.playerPosition.x + direction.x * amount,
+        z = this.playerPosition.z + direction.z * amount;
+      if (this.free(x, this.playerPosition.z)) this.playerPosition.x = x;
+      if (this.free(this.playerPosition.x, z)) this.playerPosition.z = z;
+      const angle = Math.atan2(direction.x, direction.z),
+        current = this.player.root.rotation.y;
+      this.player.root.rotation.y =
+        current +
+        Math.atan2(Math.sin(angle - current), Math.cos(angle - current)) *
+          Math.min(1, dt * 14);
+    }
+    this.playerPosition.y =
+      this.surface(this.playerPosition.x, this.playerPosition.z) -
+      0.03 * this.player.scale;
+    this.player.root.position.copy(this.playerPosition);
+    if (this.pending) {
+      const place = this.places().find((p) => p.id === this.pending);
+      if (
+        place &&
+        Math.hypot(
+          place.x - this.playerPosition.x,
+          place.z - this.playerPosition.z,
+        ) < 1.3
+      ) {
+        const id = this.pending;
+        this.pending = null;
+        this.target = [];
+        this.onInteract(id);
+      } else if (!this.target.length) this.pending = null;
+    }
+    if (!this.active) return;
+    const nearest = this.nearest();
+    if ((nearest?.id ?? "") !== this.lastNearby) {
+      this.lastNearby = nearest?.id ?? "";
+      this.onNearby(nearest);
+    }
+    if (this.obstacle?.visible) {
+      this.obstacle.position.x = Math.sin(this.clock * 0.5) * 1.7;
+      if (this.playerPosition.distanceTo(this.obstacle.position) < 0.57)
+        this.onHazard();
+    }
+    this.timeToSave += dt;
+    if (this.timeToSave > 3) {
+      this.timeToSave = 0;
+      this.onPosition();
+    }
+  }
+  private animate(actor: Actor, moving: boolean, time: number) {
+    const swing = moving ? Math.sin(time * 10) * 0.38 : 0;
+    actor.limbs.forEach((limb, i) => {
+      if (limb) limb.rotation.x = (i === 0 || i === 3 ? 1 : -1) * swing;
+    });
+    if (actor.head)
+      actor.head.rotation.z = this.reducedMotion
+        ? 0
+        : Math.sin(time * 1.5) * 0.025;
+  }
+  private tick = (ms: number) => {
+    const dt = Math.min((ms - this.last) / 1000 || 0, 0.08);
+    this.last = ms;
+    this.accumulator = Math.min(this.accumulator + dt, 0.1);
+    while (this.accumulator >= 1 / 60) {
+      this.step(1 / 60);
+      this.accumulator -= 1 / 60;
+    }
+    if (this.player)
+      this.animate(this.player, this.active && this.walking, this.clock);
+    for (let i = 0; i < this.actors.length; i++)
+      this.animate(this.actors[i], false, this.clock + i);
+    if (this.active && !this.reducedMotion) {
+      for (const p of this.points)
+        if (p.place.kind === "discovery") {
+          p.root.children[0].rotation.y =
+            Math.sin(this.clock * 0.7 + p.place.index) * 0.18;
+          p.root.children[0].position.y =
+            0.18 + Math.sin(this.clock * 2 + p.place.index) * 0.025;
+        }
+      if (this.sparkle)
+        this.sparkle.rotation.y = Math.sin(this.clock * 0.05) * 0.07;
+    }
+    this.renderer.render(this.scene, this.camera);
+    this.frame = requestAnimationFrame(this.tick);
+  };
+  diagnostics() {
+    return {
+      drawCalls: this.renderer.info.render.calls,
+      triangles: this.renderer.info.render.triangles,
+      position: { x: this.playerPosition.x, z: this.playerPosition.z },
+      models: [...this.models.keys()],
+      playerVisible: !!this.player?.root.visible,
+    };
+  }
+  dispose() {
+    cancelAnimationFrame(this.frame);
+    this.observer.disconnect();
+    this.release(this.room);
+    this.release(this.cast);
+    this.release(this.fx);
+    this.renderer.dispose();
+  }
+}

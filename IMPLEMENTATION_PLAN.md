@@ -61,7 +61,7 @@ Geometry rules: ground is Y=0 in Three.js, assets use Blender Z-up before glTF c
 | 11. Room to breathe | Garden | Choose retirement rhythm | Rowan returns with a memory of childhood |
 | 12. The things we leave | Garden | Open the keepsake tin | Choose a legacy; receive a personalized ending |
 
-Each chapter has optional objects representing health, happiness, and security; each can resolve only once. A moving environmental inconvenience appears in suitable later stages, is forgiving, and can affect the player only once per chapter. Exploration must not turn into infinite score farming. A zero score triggers support with no permanent loss route. Optional discoveries never gate the story.
+Each chapter has optional objects representing health, happiness, and security; each can resolve only once. A moving environmental inconvenience appears in suitable later stages, is forgiving, and can affect the player only once per chapter. Exploration must not turn into infinite score farming. A zero score never ends the story; supportive choices and optional discoveries remain available. Optional discoveries never gate the story.
 
 ## 6. Story and consequence design
 

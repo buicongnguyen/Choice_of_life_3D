@@ -1,0 +1,73 @@
+{
+  "base": "http://127.0.0.1:4194/",
+  "errors": [],
+  "desktop": {
+    "mode": "ending",
+    "panel": "none",
+    "loading": false,
+    "chapter": 11,
+    "complete": true,
+    "choices": 24,
+    "discoveries": 1,
+    "render": {
+      "drawCalls": 260,
+      "triangles": 112852,
+      "position": {
+        "x": 0,
+        "z": 2.6
+      },
+      "models": [
+        "male",
+        "female",
+        "baby",
+        "cat",
+        "home",
+        "blanket",
+        "rattle",
+        "coins",
+        "apple",
+        "boat",
+        "school",
+        "book",
+        "ball",
+        "letter",
+        "campus",
+        "plant",
+        "office",
+        "town",
+        "garden",
+        "tin"
+      ],
+      "playerVisible": true
+    }
+  },
+  "mobile": {
+    "mode": "play",
+    "panel": "pause",
+    "loading": false,
+    "chapter": 0,
+    "complete": false,
+    "choices": 1,
+    "discoveries": 0,
+    "render": {
+      "drawCalls": 202,
+      "triangles": 61466,
+      "position": {
+        "x": -2.0999872005080507,
+        "z": 0.5789828776833207
+      },
+      "models": [
+        "male",
+        "female",
+        "baby",
+        "cat",
+        "home",
+        "blanket",
+        "rattle",
+        "coins"
+      ],
+      "playerVisible": true
+    }
+  },
+  "result": "pass"
+}

@@ -1,0 +1,27 @@
+{
+  "author": "Choice of Life 3D project",
+  "generator": "Blender 4.5 / art/build_assets.py",
+  "license": "Original project-generated geometry; no external meshes or textures",
+  "files": {
+    "apple.glb": 29796,
+    "baby.glb": 165624,
+    "ball.glb": 32956,
+    "blanket.glb": 22876,
+    "boat.glb": 16136,
+    "book.glb": 18176,
+    "campus.glb": 444660,
+    "cat.glb": 103376,
+    "coins.glb": 20256,
+    "female.glb": 236680,
+    "garden.glb": 850260,
+    "home.glb": 365304,
+    "letter.glb": 15492,
+    "male.glb": 200344,
+    "office.glb": 390972,
+    "plant.glb": 49104,
+    "rattle.glb": 21048,
+    "school.glb": 444840,
+    "tin.glb": 22368,
+    "town.glb": 862864
+  }
+}
