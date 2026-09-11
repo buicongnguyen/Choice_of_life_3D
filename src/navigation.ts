@@ -7,10 +7,23 @@ export const navigation = {
   grid: 0.35,
   reach: 1.55,
   arrival: 1.25,
+  pickup: 1.25,
 } as const;
 export const spawn: Point = { x: 0, z: 2.6 };
 export const distance = (a: Point, b: Point) =>
   Math.hypot(a.x - b.x, a.z - b.z);
+
+/** Pickups require the same clear ground path as interactions, never through furniture. */
+export function withinPickup(
+  player: Point,
+  item: Point,
+  colliders: Collider[],
+) {
+  return (
+    distance(player, item) < navigation.pickup &&
+    clearSegment(player, item, colliders)
+  );
+}
 
 export function free(p: Point, colliders: Collider[]) {
   return (

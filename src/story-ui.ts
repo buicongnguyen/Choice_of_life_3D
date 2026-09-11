@@ -1,4 +1,5 @@
 import type { Life } from "./core";
+import { responseSummary } from "./choice-copy";
 import { chapters, type Scores } from "./content";
 import {
   activity,
@@ -55,7 +56,7 @@ export function activityPanel(s: Life) {
   if (task.kind === "planner") {
     board += `<div class="planner-slots" aria-label="Your three time blocks">${[0, 1, 2].map((i) => `<div class="time-slot ${r.actions[i] ? "filled" : ""}"><small>BLOCK ${i + 1}</small><strong>${esc(task.actions.find((a) => a.id === r.actions[i])?.label ?? "Open afternoon")}</strong></div>`).join("")}</div>`;
     const result = taskResult(s);
-    board += `<p class="activity-feedback">Plan preview: ${esc(effectText(result.effect))}. Changes apply only when you keep the plan.</p>`;
+    board += `<p class="activity-feedback">Preview: ${esc(effectText(result.effect))}. Applied after 3 blocks.</p>`;
   } else {
     board += `<div class="task-progress" aria-label="Activity progress">${Array.from({ length: count }, (_, i) => `<span class="${i < completed ? "done" : ""}">${i < completed ? "✓" : i + 1}</span>`).join(" ")}</div>`;
     if (last)
@@ -74,12 +75,10 @@ export function activityPanel(s: Life) {
     .join("")}</div>`;
   return panel(
     heading(
-      task.kind === "planner"
-        ? "MAKE TIME FOR WHAT MATTERS"
-        : "A LITTLE HANDS-ON MOMENT",
+      task.kind === "planner" ? "PLAN 3 BLOCKS" : "OPTIONAL ACTIVITY",
       task.title,
     ) +
-      `<p class="prompt">${esc(task.intro)}</p>${board}<div class="activity-tools">${task.kind === "planner" ? button("task-undo", "Undo last block", r.actions.length ? "" : "disabled") : ""}${button("task-assist", task.kind === "planner" ? "Finish with a suggested plan" : "Help me finish")}</div><p class="untimed">Optional · No timer · Progress saves after each step</p>`,
+      `<p class="prompt">${esc(task.kind === "planner" ? "Choose 3 blocks. You can repeat an option." : task.kind === "search" ? "Find the boat, then choose how to help." : "Follow the steps at your own pace.")}</p>${board}<div class="activity-tools">${task.kind === "planner" ? button("task-undo", "Undo", r.actions.length ? "" : "disabled") : ""}${button("task-assist", "Help me finish")}</div><details class="choice-details"><summary>More details</summary><p>${esc(task.intro)}</p><p>No timer. Each step saves.</p></details>`,
     "activity-panel",
   );
 }
@@ -87,7 +86,7 @@ export function briefingPanel(s: Life) {
   const ch = chapters[s.chapter];
   return panel(
     heading(`CHAPTER ${s.chapter + 1} · AGE ${ch.age}`, ch.title) +
-      `<p class="prompt">${esc(ch.intro)}</p><p class="story-goal">${esc(objectives[s.chapter])}</p><div class="briefing-task"><span>OPTIONAL ACTIVITY</span><strong>${esc(activity(s).title)}</strong><p>Look for its teal label in the room, or use Explore to walk there. Your choices and keepsakes will be remembered.</p></div><div class="activity-tools">${button("close", "Step into this chapter →", 'class="primary"')}</div>`,
+      `<p class="story-goal">${esc(objectives[s.chapter])}</p><div class="briefing-task"><span>OPTIONAL</span><strong>${esc(activity(s).title)}</strong><p>Use Explore to find it. Walk near items to collect them.</p></div><div class="activity-tools">${button("close", "Let's go →", 'class="primary"')}</div><details class="choice-details"><summary>The story so far</summary><p>${esc(ch.intro)}</p></details>`,
   );
 }
 export function responsePanel(
@@ -97,8 +96,8 @@ export function responsePanel(
   note = "",
 ) {
   return panel(
-    heading("A MOMENT THAT STAYS", title) +
-      `<p class="prompt response-copy">${esc(text)}</p>${note ? `<p class="context">${esc(note)}</p>` : ""}<p class="actual-effect">${esc(effectText(effect))}</p><div class="activity-tools">${button("close", "Keep exploring →", 'class="primary"')}</div>`,
+    heading("SAVED TO YOUR STORY", title) +
+      `<p class="prompt response-copy">${esc(responseSummary(text))}</p><p class="actual-effect">${esc(effectText(effect))}</p><div class="activity-tools">${button("close", "Continue →", 'class="primary"')}</div>${text !== responseSummary(text) || note ? `<details class="choice-details"><summary>More details</summary>${text !== responseSummary(text) ? `<p>${esc(text)}</p>` : ""}${note ? `<p>${esc(note)}</p>` : ""}</details>` : ""}`,
     "response-panel",
   );
 }

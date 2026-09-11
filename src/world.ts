@@ -13,6 +13,7 @@ import {
   recoverPosition,
   surfaceHeight,
   navigation,
+  withinPickup,
   type Collider,
 } from "./navigation";
 
@@ -86,6 +87,7 @@ export class World {
   reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
   speed = 2.6;
   onInteract: (id: string) => void = () => {};
+  onCollect: (index: number) => void = () => {};
   onNearby: (place: Place | undefined) => void = () => {};
   onHazard: () => void = () => {};
   onPosition: () => void = () => {};
@@ -924,6 +926,21 @@ export class World {
       this.surface(this.playerPosition.x, this.playerPosition.z) -
       0.03 * this.player.scale;
     this.player.root.position.copy(this.playerPosition);
+    // Only rewards auto-collect. People, activities, guests and exits still need
+    // an explicit interaction. Do not cancel a held direction or an unrelated route.
+    for (const { place, root } of this.points) {
+      if (
+        root.visible &&
+        place.kind === "discovery" &&
+        withinPickup(this.playerPosition, place, this.colliders)
+      ) {
+        this.onCollect(place.index);
+        if (!root.visible && this.pending === place.id) {
+          this.pending = null;
+          this.target = [];
+        }
+      }
+    }
     if (this.pending) {
       const place = this.places().find((p) => p.id === this.pending);
       if (

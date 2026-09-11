@@ -1,6 +1,6 @@
 {
   "name": "choice-of-life-3d",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "type": "module",
   "description": "A warm 3D life adventure, built with Blender and Three.js.",
@@ -8,7 +8,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build && node scripts/release.mjs",
     "preview": "vite preview --host 127.0.0.1",
-    "test": "tsx --test src/core.test.ts src/navigation.test.ts src/graphics.test.ts",
+    "test": "tsx --test src/core.test.ts src/navigation.test.ts src/graphics.test.ts src/choice-copy.test.ts",
     "smoke": "node scripts/story-smoke.mjs"
   },
   "dependencies": {

@@ -360,3 +360,138 @@ body[data-panel="choice"] .choice small {
     font-size: 16px !important;
   }
 }
+
+/* Compact decision cards: concise copy first; the complete story stays expandable. */
+body[data-panel="choice"] .compact-choice,
+.dialogue.story-panel {
+  width: min(680px, 94vw);
+  max-height: min(46dvh, var(--dialogue-limit, 46dvh));
+  padding: 12px 16px;
+  border-radius: 16px;
+}
+.compact-choice .dialogue-header {
+  min-height: 44px;
+  margin-bottom: 2px;
+}
+.compact-choice .dialogue-header h2 {
+  font-size: 24px;
+}
+.dialogue .close {
+  min-width: 44px;
+  min-height: 44px;
+}
+body[data-panel="choice"] .compact-choice .prompt {
+  font-size: 14px;
+  line-height: 1.4;
+  margin: 0 0 9px;
+}
+.compact-choice .choices {
+  gap: 6px;
+}
+.compact-choice .choice {
+  min-height: 62px;
+  padding: 8px;
+  align-items: center;
+}
+.compact-choice .choice-copy {
+  min-width: 0;
+  flex: 1;
+}
+.compact-choice .choice strong {
+  margin: 0;
+  line-height: 1.3;
+}
+.compact-choice .deltas {
+  margin-top: 4px;
+  gap: 10px;
+}
+.compact-choice .delta {
+  font-size: 12px;
+}
+.choice-details {
+  margin-top: 8px;
+}
+.choice-details summary {
+  cursor: pointer;
+  color: #365e50;
+  font-size: 13px;
+  padding: 8px 0;
+  min-height: 36px;
+}
+.choice-details p {
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 8px 0;
+  color: #506858;
+}
+.dialogue.story-panel .dialogue-header h2 {
+  font-size: 24px;
+  line-height: 1.15;
+}
+.dialogue.story-panel .response-copy {
+  font-size: 15px !important;
+  line-height: 1.5;
+}
+.dialogue.story-panel .story-goal {
+  font-size: 19px;
+  margin: 8px 0;
+}
+.dialogue.story-panel .briefing-task {
+  margin: 8px 0;
+  padding: 6px 10px;
+}
+.dialogue.story-panel .activity-tools {
+  margin-top: 8px;
+}
+.dialogue.story-panel .activity-feedback {
+  padding: 8px 10px;
+  margin: 7px 0;
+}
+.large-text .compact-choice .choice strong {
+  font-size: 17px;
+}
+.large-text .compact-choice .delta,
+.large-text .choice-details p,
+.large-text .choice-details summary {
+  font-size: 15px;
+}
+.large-text[data-panel="choice"] .compact-choice .prompt {
+  font-size: 18px;
+}
+.large-text .dialogue.story-panel .response-copy {
+  font-size: 19px !important;
+}
+@media (max-width: 700px) {
+  .compact-choice .choice {
+    min-height: 52px;
+    padding: 7px 9px;
+  }
+  .compact-choice .choice-copy {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px 8px;
+    justify-content: space-between;
+  }
+  .compact-choice .choice-copy strong {
+    flex: 1 1 120px;
+    font-size: 14px;
+  }
+  .compact-choice .choice-copy .deltas {
+    margin-top: 0;
+  }
+  .compact-choice .choice-copy small {
+    width: 100%;
+    order: 3;
+    margin-top: 0;
+  }
+  .dialogue.story-panel .dialogue-header .eyebrow {
+    font-size: 9px;
+  }
+  .dialogue.story-panel .dialogue-header h2 {
+    font-size: 22px;
+  }
+  .activity-actions.planner {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

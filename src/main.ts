@@ -2,6 +2,7 @@ import "./style.css";
 import "./story.css";
 import { World, type Place } from "./world";
 import { graphicsQuality, type GraphicsQuality } from "./graphics";
+import { choiceCopy } from "./choice-copy";
 import { chapters, careerFor, type Scores } from "./content";
 import {
   activity,
@@ -210,7 +211,13 @@ function delta(effect: Partial<Scores>) {
       const actual =
         Math.max(0, Math.min(100, state.scores[k] + effect[k]!)) -
         state.scores[k];
-      return `<span class="delta ${k}">${icons[k]} ${actual === 0 ? `${names[k]} ${effect[k]! > 0 ? "full" : "at minimum"}` : `${actual > 0 ? "+" : ""}${actual} ${names[k]}`}</span>`;
+      const value =
+        actual === 0
+          ? effect[k]! > 0
+            ? "full"
+            : "min"
+          : `${actual > 0 ? "+" : ""}${actual}`;
+      return `<span class="delta ${k}" aria-label="${names[k]} ${value}" title="${names[k]} ${value}"><span aria-hidden="true">${icons[k]} ${value}</span></span>`;
     })
     .join("");
 }
@@ -296,13 +303,14 @@ function panelUI() {
     );
   if (panel === "choice") {
     const enc = conversation(state, activeEncounter);
-    return `<section class="dialogue" role="dialog" aria-modal="true" aria-labelledby="dialogue-title"><div class="dialogue-header"><span class="speaker-mark">${esc(enc.person.slice(0, 1))}</span><div><p class="eyebrow">${esc(enc.role)}</p><h2 id="dialogue-title" tabindex="-1">${esc(enc.person)}</h2></div>${btn("close", "×", "close", 'aria-label="Return to exploring"')}</div>${enc.context ? `<p class="context">${esc(enc.context(state.facts))}</p>` : ""}<p class="prompt">${esc(enc.prompt)}</p><div class="choices">${enc.options.map((o, i) => `<button class="choice" data-action="choose" data-index="${i}" ${canChoose(state, activeEncounter, i) ? "" : "disabled"}><span class="option-index">${i + 1}</span><span><strong>${esc(o.label)}</strong><small>${esc(o.hint)}</small><span class="deltas">${delta(o.effect)}</span></span><span class="option-arrow">↗</span></button>`).join("")}</div><p class="untimed">Take your time. The world will wait.</p></section>`;
+    const short = choiceCopy(state, activeEncounter);
+    return `<section class="dialogue compact-choice" role="dialog" aria-modal="true" aria-labelledby="dialogue-title"><div class="dialogue-header"><h2 id="dialogue-title" tabindex="-1">${esc(enc.person)}</h2>${btn("close", "×", "close", 'aria-label="Return to exploring"')}</div><p class="prompt">${esc(short.prompt)}</p><div class="choices">${enc.options.map((o, i) => `<button class="choice" data-action="choose" data-index="${i}" ${canChoose(state, activeEncounter, i) ? "" : "disabled"}><span class="option-index">${i + 1}</span><span class="choice-copy"><strong>${esc(short.labels[i])}</strong>${canChoose(state, activeEncounter, i) ? "" : "<small>Meet first</small>"}<span class="deltas">${delta(o.effect)}</span></span></button>`).join("")}</div><details class="choice-details"><summary>More details</summary><p class="effect-key">♥ Health · ✦ Happiness · ● Money</p><p>${esc(enc.prompt)}</p>${enc.context ? `<p class="context">${esc(enc.context(state.facts))}</p>` : ""}${enc.options.map((o, i) => `<p><strong>${i + 1}. ${esc(short.labels[i])}:</strong> ${esc(o.hint)}</p>`).join("")}</details></section>`;
   }
   let heading = "",
     content = "";
   if (panel === "explore") {
     heading = "Where will you go?";
-    content = `<p>Choose a person or discovery. Your character will walk there and interact.</p><div class="place-list">${world
+    content = `<p>Tap a destination to walk there. Nearby items collect automatically.</p><div class="place-list">${world
       .places()
       .map(
         (p) =>
@@ -427,7 +435,11 @@ function nearby(place?: Place) {
           ? `Talk to ${place.label}`
           : place.kind === "exit"
             ? place.label
-            : "Discover"
+            : place.kind === "activity"
+              ? "Try activity"
+              : place.kind === "discovery"
+                ? "Pick up"
+                : `Talk to ${place.label}`
         : "Explore the room";
   }
 }
@@ -499,25 +511,35 @@ function interact(id: string) {
     render(true);
     world.acknowledge();
   } else if (kind === "discovery") {
-    const next = discover(state, i);
-    if (next === state) return;
-    state = next;
-    world.update(state);
-    save();
-    cue();
-    render();
-    const actual =
-      state.memories[state.memories.length - 1].effect[scoreKeys[i]];
-    toast(
-      `${chapters[state.chapter].discoveries[i]} · ${actual ? `+${actual} ${names[scoreKeys[i]]}` : `${names[scoreKeys[i]]} already full; a memory kept.`}`,
-    );
+    collect(i);
   } else if (kind === "exit" && chapterDone(state)) {
     state = advance(state);
     save(false);
     void showChapter();
   }
 }
+function collect(index: number) {
+  if (mode !== "play" || panel !== "none" || loading || busy) return;
+  // Index 1 is the optional activity anchor, not an automatic reward.
+  if (index !== 0 && index !== 2) return;
+  const next = discover(state, index);
+  if (next === state) return;
+  state = next;
+  world.update(state);
+  save();
+  cue();
+  // Updating just the HUD keeps held keyboard/touch input and the route alive.
+  const scores = ui.querySelector(".scores");
+  if (scores) scores.outerHTML = stats();
+  const count = ui.querySelector('[data-action="journal"] .count');
+  if (count) count.textContent = String(state.memories.length);
+  const actual = state.memories.at(-1)!.effect[scoreKeys[index]];
+  toast(
+    `Picked up: ${chapters[state.chapter].discoveries[index]} · ${actual ? `+${actual} ${names[scoreKeys[index]]}` : "Saved"}`,
+  );
+}
 world.onInteract = interact;
+world.onCollect = collect;
 world.onNearby = nearby;
 world.onHazard = () => {
   const before = state.scores.health;
@@ -723,7 +745,7 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Tab" && panel !== "none") {
     const items = [
       ...ui.querySelectorAll<HTMLElement>(
-        '[role="dialog"] button:not(:disabled),[role="dialog"] input:not(:disabled),[role="dialog"] select:not(:disabled)',
+        '[role="dialog"] button:not(:disabled),[role="dialog"] input:not(:disabled),[role="dialog"] select:not(:disabled),[role="dialog"] summary',
       ),
     ];
     const first = items[0],

@@ -1,0 +1,70 @@
+{
+  "pickupPreservesMovement": true,
+  "rewardSavedOnce": true,
+  "checks": [
+    {
+      "label": "briefing",
+      "height": 328.375,
+      "screen": 844,
+      "scene": 342.234375,
+      "overlap": false,
+      "overflow": false,
+      "visibleChoices": true
+    },
+    {
+      "label": "choice-390",
+      "height": 312.59375,
+      "screen": 844,
+      "scene": 358.015625,
+      "overlap": false,
+      "overflow": false,
+      "visibleChoices": true
+    },
+    {
+      "label": "choice-375",
+      "height": 306.8125,
+      "screen": 667,
+      "scene": 186.796875,
+      "overlap": false,
+      "overflow": false,
+      "visibleChoices": true
+    },
+    {
+      "label": "details",
+      "height": 306.8125,
+      "screen": 667,
+      "scene": 186.796875,
+      "overlap": false,
+      "overflow": false,
+      "visibleChoices": true
+    },
+    {
+      "label": "response",
+      "height": 264,
+      "screen": 667,
+      "scene": 229.609375,
+      "overlap": false,
+      "overflow": false,
+      "visibleChoices": true
+    },
+    {
+      "label": "guests",
+      "height": 339.921875,
+      "screen": 844,
+      "scene": 330.6875,
+      "overlap": false,
+      "overflow": false,
+      "visibleChoices": true
+    },
+    {
+      "label": "guests-375",
+      "height": 306.8125,
+      "screen": 667,
+      "scene": 186.796875,
+      "overlap": false,
+      "overflow": false,
+      "visibleChoices": true
+    }
+  ],
+  "errors": []
+}

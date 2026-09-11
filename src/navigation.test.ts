@@ -8,6 +8,7 @@ import {
   recoverPosition,
   surfaceHeight,
   spawn,
+  withinPickup,
   type Collider,
   type Point,
 } from "./navigation";
@@ -70,4 +71,15 @@ test("surface heights distinguish every rug, path, stone and gap", () => {
     assert.equal(surfaceHeight(scene, 2.5, 1.65), 0.06);
     assert.equal(surfaceHeight(scene, 5.6, 1.65), 0.06);
   }
+});
+
+test("pickup range requires clear ground and excludes distant items", () => {
+  assert.equal(withinPickup({ x: 0, z: 0 }, { x: 1, z: 0 }, []), true);
+  assert.equal(withinPickup({ x: 0, z: 0 }, { x: 1.3, z: 0 }, []), false);
+  assert.equal(
+    withinPickup({ x: -0.6, z: 0 }, { x: 0.6, z: 0 }, [
+      { x: 0, z: 0, w: 0.2, d: 1 },
+    ]),
+    false,
+  );
 });
