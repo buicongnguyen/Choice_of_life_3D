@@ -4,6 +4,10 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];OUT=ROOT/'public'/'models';OUT.mkdir(parents=True,exist_ok=True)
 COL={'cream':'f6e6c8','wood':'c18b59','edge':'805f43','teal':'4a9990','dark':'214d48','coral':'df8269','gold':'e9b74f','leaf':'68976a','lightleaf':'98bc76','blue':'75a7bd','white':'fff7e6','ink':'302b32','skin':'e4ad7d','hair':'4c3329','pants':'426c74','pink':'ed9e8c','stone':'b8bda1'}
 mats={}
+active_colliders=None
+
+def solid(x,z,w,d):
+    if active_colliders is not None:active_colliders.append({'x':x,'z':z,'w':w,'d':d})
 def mat(name):
     if name in mats:return mats[name]
     h=COL[name];rgb=[int(h[i:i+2],16)/255 for i in (0,2,4)];rgb=[c/12.92 if c<.04045 else ((c+.055)/1.055)**2.4 for c in rgb]
@@ -33,9 +37,11 @@ def export(n,merge=False):
     bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'art'/f'{n}.blend'))
     bpy.ops.export_scene.gltf(filepath=str(OUT/f'{n}.glb'),export_format='GLB',export_yup=True,export_apply=True)
 def plant(x,z,s=1):
+    solid(x,z,.58*s,.58*s)
     cyl('Pot',(x,.23*s,z),.29*s,.46*s,'coral');cyl('Stem',(x,.85*s,z),.045*s,1*s,'edge')
     for i in range(5):ball('Leaf',(x+math.sin(i*2.4)*.25*s,1*s+i*.06,z+math.cos(i*2.4)*.25*s),(.2*s,.37*s,.17*s),'leaf' if i%2 else 'lightleaf')
 def tree(x,z,s=1):
+    solid(x,z,.32*s,.32*s)
     cyl('Trunk',(x,.75*s,z),.16*s,1.5*s,'edge')
     for dx,dy,dz in [(-.4,1.9,0),(.4,2,0),(0,2.55,.1),(0,1.95,-.4)]:ball('Canopy',(x+dx*s,dy*s,z+dz*s),(.85*s,.78*s,.78*s),'leaf' if dx<0 else 'lightleaf')
 def bench(x,z,c='wood'):
@@ -63,8 +69,7 @@ def base(outdoor):
         for y in [.4,.9]:box('Fence rail',(0,y,-4.4),(11,.12,.1),'white',.03)
 colliders={}
 for scene in ['home','school','campus','office','town','garden']:
-    reset();base(scene in ['town','garden']);colliders[scene]=[]
-    def solid(x,z,w,d):colliders[scene].append({'x':x,'z':z,'w':w,'d':d})
+    reset();colliders[scene]=[];active_colliders=colliders[scene];base(scene in ['town','garden'])
     if scene=='home':
         box('Rug',(0,.13,0),(5.7,.06,4),'teal',.2)
         for x in [-2.5,2.5]:box('Rug border',(x,.17,0),(.12,.015,3.7),'cream',.01)
@@ -75,7 +80,7 @@ for scene in ['home','school','campus','office','town','garden']:
             for z in [-3.65,-2.65]:box('Crib post',(x,.6,z),(.12,1.2,.12),'teal',.03)
         for x in [3.2,3.6,4,4.4,4.7]:box('Crib rail',(x,.6,-3.65),(.07,1.1,.07),'teal',.01)
         solid(3.9,-3.15,2.1,1.2);plant(-5.6,2.8);plant(5.5,-3.5)
-        for x,z,c in [(-4,2.8,'gold'),(-3.4,3,'coral'),(-4.4,3.3,'blue')]:box('Toy block',(x,.3,z),(.45,.45,.45),c,.09)
+        for x,z,c in [(-4,2.8,'gold'),(-3.4,3,'coral'),(-4.4,3.3,'blue')]:box('Toy block',(x,.3,z),(.45,.45,.45),c,.09);solid(x,z,.45,.45)
     elif scene in ['school','campus']:
         box('Board frame',(0,1.55,-4.38),(3.8,1.6,.12),'edge');box('Chalkboard',(0,1.55,-4.29),(3.5,1.3,.06),'dark')
         for x,w in [(-.8,.8),(.4,1.3),(-.3,1.8)]:box('Chalk marks',(x,1.65+x*.2,-4.23),(w,.05,.015),'cream',.01)
@@ -91,6 +96,7 @@ for scene in ['home','school','campus','office','town','garden']:
         for x in [-3.5,3.5]:
             for z in [-3.8,3.8]:
                 box('Planter',(x,.2,z),(1.7,.4,.7),'coral')
+                solid(x,z,1.7,.7)
                 for dx in [-.55,0,.55]:
                     cyl('Flower stem',(x+dx,.6,z),.025,.5,'leaf')
                     for a in range(5):ball('Petal',(x+dx+math.sin(a*1.256)*.1,.89,z+math.cos(a*1.256)*.1),(.09,.07,.09),'gold' if x<0 else 'pink')
@@ -102,6 +108,7 @@ for scene in ['home','school','campus','office','town','garden']:
         else:
             cyl('Fountain',(0,.25,-3),.8,.4,'stone');cyl('Water',(0,.47,-3),.66,.03,'blue');cyl('Fountain stem',(0,.8,-3),.15,.7,'cream');solid(0,-3,1.7,1.7)
     export(scene,True)
+active_colliders=None
 def parent_to(obs,root):
     for o in obs:
         world=o.matrix_world.copy();o.parent=root;o.matrix_world=world

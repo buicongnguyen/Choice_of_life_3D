@@ -2,6 +2,8 @@
 
 Date: 2026-09-10. First release: 0.1.0.
 
+Update, 2026-09-11: the 0.1.1 detailed design and refinement are recorded in [`../GAME_DESIGN.md`](../GAME_DESIGN.md) and [`REVIEW_2026-09-11.md`](REVIEW_2026-09-11.md). The historical first-release evidence below is retained; the newer review covers navigation, missing collisions, grounding, gait, touch, modal layout, story order and save integrity.
+
 ## Completed phases
 
 | Plan phase | Implemented result | Evidence |

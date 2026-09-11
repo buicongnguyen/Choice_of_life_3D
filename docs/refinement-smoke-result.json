@@ -1,0 +1,157 @@
+{
+  "base": "http://127.0.0.1:4194/",
+  "checkedAt": "2026-09-11T02:29:44.833Z",
+  "result": "pass",
+  "errors": [],
+  "reports": [
+    {
+      "check": "nursery choices, discovery, continue and next chapter",
+      "state": {
+        "mode": "play",
+        "panel": "none",
+        "loading": false,
+        "chapter": 1,
+        "complete": false,
+        "choices": 2,
+        "discoveries": 1,
+        "render": {
+          "drawCalls": 248,
+          "triangles": 74402,
+          "position": {
+            "x": 0,
+            "z": 2.6
+          },
+          "models": [
+            "male",
+            "female",
+            "baby",
+            "cat",
+            "home",
+            "blanket",
+            "rattle",
+            "coins",
+            "apple",
+            "boat",
+            "school"
+          ],
+          "playerVisible": true,
+          "scale": 0.62,
+          "walking": false,
+          "routePoints": 0
+        }
+      }
+    },
+    {
+      "check": "blur during chapter load preserves spawn and pause",
+      "state": {
+        "mode": "play",
+        "panel": "pause",
+        "loading": false,
+        "chapter": 2,
+        "complete": false,
+        "choices": 4,
+        "discoveries": 0,
+        "render": {
+          "drawCalls": 259,
+          "triangles": 80266,
+          "position": {
+            "x": 0,
+            "z": 2.6
+          },
+          "models": [
+            "male",
+            "female",
+            "baby",
+            "cat",
+            "home",
+            "blanket",
+            "rattle",
+            "coins",
+            "apple",
+            "boat",
+            "school",
+            "book"
+          ],
+          "playerVisible": true,
+          "scale": 0.7,
+          "walking": false,
+          "routePoints": 0
+        }
+      }
+    },
+    {
+      "check": "home choice works before partner introductions",
+      "state": {
+        "mode": "play",
+        "panel": "choice",
+        "loading": false,
+        "chapter": 7,
+        "complete": false,
+        "choices": 14,
+        "discoveries": 0,
+        "render": {
+          "drawCalls": 415,
+          "triangles": 153236,
+          "position": {
+            "x": 1.593432890356031,
+            "z": -0.18850755812305603
+          },
+          "models": [
+            "male",
+            "female",
+            "baby",
+            "cat",
+            "home",
+            "blanket",
+            "rattle",
+            "coins",
+            "town",
+            "plant",
+            "book"
+          ],
+          "playerVisible": true,
+          "scale": 1,
+          "walking": false,
+          "routePoints": 0
+        }
+      }
+    },
+    {
+      "check": "touch ownership and portrait/landscape story layout",
+      "state": {
+        "mode": "play",
+        "panel": "none",
+        "loading": false,
+        "chapter": 1,
+        "complete": false,
+        "choices": 2,
+        "discoveries": 0,
+        "render": {
+          "drawCalls": 248,
+          "triangles": 74402,
+          "position": {
+            "x": 1.7589568747131894,
+            "z": -0.12042946338547977
+          },
+          "models": [
+            "male",
+            "female",
+            "baby",
+            "cat",
+            "home",
+            "blanket",
+            "rattle",
+            "coins",
+            "apple",
+            "boat",
+            "school"
+          ],
+          "playerVisible": true,
+          "scale": 0.62,
+          "walking": false,
+          "routePoints": 0
+        }
+      }
+    }
+  ]
+}

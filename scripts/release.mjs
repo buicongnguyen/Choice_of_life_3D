@@ -1,5 +1,8 @@
 import { execSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+const { version } = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+);
 let sha = process.env.GITHUB_SHA || "local";
 if (sha === "local") {
   try {
@@ -8,9 +11,5 @@ if (sha === "local") {
 }
 writeFileSync(
   "dist/release.json",
-  JSON.stringify(
-    { version: "0.1.0", sha, builtAt: new Date().toISOString() },
-    null,
-    2,
-  ),
+  JSON.stringify({ version, sha, builtAt: new Date().toISOString() }, null, 2),
 );

@@ -47,8 +47,8 @@ let identity: Identity = saved?.identity ?? {
 };
 let state: Life = saved ?? newLife(identity);
 let mode: "title" | "play" | "ending" = "title";
-let panel: "none" | "choice" | "journal" | "explore" | "pause" | "restart" =
-  "none";
+type Panel = "none" | "choice" | "journal" | "explore" | "pause" | "restart";
+let panel: Panel = "none";
 let activeEncounter = 0,
   loading = true,
   loadError = "",
@@ -63,7 +63,7 @@ try {
     localStorage.getItem("choice-of-life-3d-settings") ?? "{}",
   );
   sound = prefs.sound === true;
-  reduced = prefs.reduced ?? reduced;
+  reduced = typeof prefs.reduced === "boolean" ? prefs.reduced : reduced;
   pace = ["gentle", "normal", "brisk"].includes(prefs.pace)
     ? prefs.pace
     : "gentle";
@@ -71,6 +71,9 @@ try {
 let audio: AudioContext | undefined;
 let toastTimer = 0;
 let world: World;
+let padPointer: number | null = null;
+let renderedPanel: Panel = "none";
+let returnAction: string | undefined;
 try {
   world = new World(host);
 } catch {
@@ -115,7 +118,8 @@ function prefs() {
 prefs();
 function save(updatePosition = true) {
   if (mode === "title") return;
-  if (updatePosition)
+  // A chapter load still displays the previous room; keep the new safe spawn.
+  if (updatePosition && !loading)
     state.position = { x: world.playerPosition.x, z: world.playerPosition.z };
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(state));
@@ -124,6 +128,11 @@ function save(updatePosition = true) {
   } catch {
     storageIssue = true;
   }
+  const status = ui.querySelector("#save-status");
+  if (status)
+    status.textContent = storageIssue
+      ? "Saving unavailable · keep this tab open"
+      : "● Saved on this device";
 }
 function toast(message: string) {
   notice = message;
@@ -144,7 +153,7 @@ function delta(effect: Partial<Scores>) {
       const actual =
         Math.max(0, Math.min(100, state.scores[k] + effect[k]!)) -
         state.scores[k];
-      return `<span class="delta ${k}">${icons[k]} ${actual === 0 ? `${names[k]} full` : `${actual > 0 ? "+" : ""}${actual} ${names[k]}`}</span>`;
+      return `<span class="delta ${k}">${icons[k]} ${actual === 0 ? `${names[k]} ${effect[k]! > 0 ? "full" : "at minimum"}` : `${actual > 0 ? "+" : ""}${actual} ${names[k]}`}</span>`;
     })
     .join("");
 }
@@ -161,6 +170,7 @@ function title() {
  <p class="load-state" role="status">${loadError ? esc(loadError) : loading ? "Making a little room for you…" : saved ? `Saved at chapter ${saved.chapter + 1} · ${esc(chapters[saved.chapter].title)}` : "Move, explore, and make the next moment yours."}</p>${loadError ? btn("retry", "Retry loading", "secondary") : ""}
  <details class="personalise"><summary>Make it yours <span>＋</span></summary><div class="setup-fields"><label>Your name<input name="name" maxlength="24" value="${esc(identity.name === "You" ? "" : identity.name)}" placeholder="Your name" autocomplete="off"></label><label>Character<select name="gender"><option value="female" ${identity.gender === "female" ? "selected" : ""}>Female</option><option value="male" ${identity.gender === "male" ? "selected" : ""}>Male</option></select></label><label>Skin tone<select name="skin">${["Warm", "Light", "Brown", "Deep"].map((n, i) => `<option value="${i}" ${identity.skin === i ? "selected" : ""}>${n}</option>`).join("")}</select></label><label>Pace<select name="pace">${["gentle", "normal", "brisk"].map((n) => `<option ${pace === n ? "selected" : ""}>${n}</option>`).join("")}</select></label></div></details>
  ${invalidSave ? '<p class="warning">An older or damaged 3D save could not be read. It is kept until you choose to begin a new life.</p>' : ""}
+ ${storageIssue ? '<p class="warning">Saving is unavailable in this browser. You can play, but keep this tab open to retain this session.</p>' : ""}
  </section><p class="scene-caption"><span>01 / THE BEGINNING</span>A room full of possibilities</p><footer class="title-footer"><span>Built from small, meaningful choices.</span><div>${btn("sound", sound ? "♫ Sound on" : "♫ Sound off")}${btn("motion", reduced ? "Gentle motion" : "Full motion")}</div></footer></main>`;
 }
 function playUI() {
@@ -177,7 +187,7 @@ function playUI() {
            .map((e) => e.person)
            .join(" & "),
        )} · ${done}/2 moments`
- }</small></div></aside>
+ }</small><small class="discovery-progress">${state.discoveries.filter((id) => id.startsWith(`${state.chapter}:`)).length}/3 optional discoveries · Money measures security</small></div></aside>
  <div id="toast" class="toast" role="status">${esc(notice)}</div>
  <div class="controls ${panel !== "none" ? "hidden" : ""}"><div class="dpad" aria-label="Movement controls"><button data-pad="0,-1" class="up" aria-label="Move up">↑</button><button data-pad="-1,0" class="left" aria-label="Move left">←</button><span class="pad-center">✦</span><button data-pad="1,0" class="right" aria-label="Move right">→</button><button data-pad="0,1" class="down" aria-label="Move down">↓</button></div><div class="move-help">WASD / arrows to move<br>or tap a place to walk there</div>${btn("interact", '<kbd>E</kbd> <span id="interact-label">Explore the room</span>', "interact", 'id="interact" disabled')}</div>
  <footer class="game-footer"><div>${btn("explore", "⌖ Explore")}${btn("journal", `▤ Memories <span class="count">${state.memories.length}</span>`)}</div><span id="save-status">${storageIssue ? "Saving unavailable · keep this tab open" : "● Saved on this device"}</span><div>${btn("sound", sound ? "♫" : "♪", "icon-button", `aria-label="${sound ? "Mute sound" : "Enable sound"}"`)}${btn("pause", "Ⅱ", "icon-button", 'aria-label="Pause game"')}</div></footer>
@@ -216,7 +226,7 @@ function panelUI() {
     content = `<p>Your current 3D life will be replaced when you begin. You can read your memories before starting again.</p><div class="menu-actions">${btn("new-confirm", "Begin a new life", "primary")}${btn("cancel-restart", "Keep my current life", "secondary")}</div>`;
   } else {
     heading = "A moment to breathe";
-    content = `<p>Your story is saved. Come back when you are ready.</p><div class="menu-actions">${btn("close", "Return to your story", "primary")}${btn("motion", reduced ? "Reduced motion: on" : "Reduced motion: off", "secondary")}${btn("sound", sound ? "Sound: on" : "Sound: off", "secondary")}${btn("title", "Save & return to title", "quiet")}</div><p class="help-copy">Move: WASD or arrows · Interact: E or Space · Pause: Esc<br>Touch: use the pad or tap a destination.<br>Explore offers an automatic walk to each story moment.</p>`;
+    content = `<p>${storageIssue ? "Saving is unavailable. Keep this tab open to keep playing your current story." : "Your story is saved. Come back when you are ready."}</p><div class="menu-actions">${btn("close", "Return to your story", "primary")}${btn("motion", reduced ? "Reduced motion: on" : "Reduced motion: off", "secondary")}${btn("sound", sound ? "Sound: on" : "Sound: off", "secondary")}${btn("title", "Save & return to title", "quiet")}</div><p class="help-copy">Move: WASD or arrows · Interact: E or Space · Pause: Esc<br>Touch: use the pad or tap a destination.<br>Explore offers an automatic walk to each story moment.</p>`;
   }
   return `<div class="modal-shade"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><header><h2 id="modal-title" tabindex="-1">${heading}</h2>${btn("close", "×", "close", 'aria-label="Close panel"')}</header>${content}</section></div>`;
 }
@@ -236,10 +246,15 @@ function endingUI() {
     )}</div><p class="ending-note">There is no perfect score for a life. There are only the things that mattered to you.</p><div class="ending-actions">${btn("journal", "Read your memory book", "secondary")}${btn("start", "Begin another story ↗", "primary")}${btn("title", "Return to title")}</div></main>`;
 }
 function render(focus = false) {
+  const focusedAction = (document.activeElement as HTMLElement | null)?.dataset
+    .action;
+  const opening = panel !== "none" && renderedPanel === "none";
+  const closing = panel === "none" && renderedPanel !== "none";
+  if (opening) returnAction = focusedAction;
   document.body.dataset.mode = mode;
   document.body.dataset.panel = panel;
   ui.innerHTML =
-    (mode === "title" ? title() : mode === "ending" ? endingUI() : playUI()) +
+    `<div class="screen-ui" ${panel !== "none" ? "inert" : ""}>${mode === "title" ? title() : mode === "ending" ? endingUI() : playUI()}</div>` +
     panelUI();
   world.active =
     mode === "play" &&
@@ -248,15 +263,57 @@ function render(focus = false) {
     !loadError &&
     !document.hidden;
   world.clearInput();
+  padPointer = null;
+  layoutObserver.disconnect();
+  for (const element of ui.querySelectorAll(".game-header,.dialogue"))
+    layoutObserver.observe(element);
+  layoutWorld();
   if (mode === "play") nearby(world.nearest());
-  if (focus) {
+  if (focus || opening || closing || focusedAction) {
+    const action = closing
+      ? returnAction
+      : !focus && !opening
+        ? focusedAction
+        : undefined;
+    const button = action
+      ? ui.querySelector<HTMLElement>(
+          `[data-action="${CSS.escape(action)}"]:not(:disabled)`,
+        )
+      : null;
     const target =
+      (button && !button.closest("[inert]") ? button : null) ??
       ui.querySelector<HTMLElement>('[role="dialog"] h2') ??
       ui.querySelector<HTMLElement>("h1");
-    target?.setAttribute("tabindex", "-1");
+    if (target?.matches("h1,h2")) target.setAttribute("tabindex", "-1");
     target?.focus({ preventScroll: true });
   }
+  renderedPanel = panel;
 }
+function layoutWorld() {
+  const dialog = ui.querySelector<HTMLElement>(".dialogue");
+  const header = ui.querySelector<HTMLElement>(".game-header");
+  if (mode === "play" && header) {
+    const bottom = header.getBoundingClientRect().bottom;
+    const progress = ui.querySelector<HTMLElement>(".chapter-progress");
+    const objective = ui.querySelector<HTMLElement>(".objective");
+    if (progress) progress.style.top = `${bottom + 8}px`;
+    if (objective) objective.style.top = `${bottom + 24}px`;
+  }
+  if (mode === "play" && dialog && header) {
+    const top = header.getBoundingClientRect().bottom + 8;
+    dialog.style.setProperty(
+      "--dialogue-limit",
+      `${Math.max(100, innerHeight - top - 96)}px`,
+    );
+    host.style.top = `${top}px`;
+    host.style.bottom = `${Math.max(0, innerHeight - dialog.getBoundingClientRect().top) + 8}px`;
+  } else {
+    host.style.removeProperty("top");
+    host.style.removeProperty("bottom");
+  }
+}
+const layoutObserver = new ResizeObserver(layoutWorld);
+window.addEventListener("resize", layoutWorld);
 function nearby(place?: Place) {
   const button = ui.querySelector<HTMLButtonElement>("#interact");
   if (button) {
@@ -331,6 +388,7 @@ function interact(id: string) {
 world.onInteract = interact;
 world.onNearby = nearby;
 world.onHazard = () => {
+  const before = state.scores.health;
   const next = hazard(state);
   if (next !== state) {
     state = next;
@@ -340,7 +398,7 @@ world.onHazard = () => {
     const scores = ui.querySelector(".scores");
     if (scores) scores.outerHTML = stats();
     toast(
-      "A little stumble · −3 Health. Watch for the purple puddle. It will not trouble you again this chapter.",
+      `A little stumble · ${state.scores.health - before} Health. Watch for the purple puddle. It will not trouble you again this chapter.`,
     );
   }
 };
@@ -351,6 +409,7 @@ ui.addEventListener("click", async (event) => {
   );
   if (!target || target.hasAttribute("disabled") || busy) return;
   const action = target.dataset.action;
+  if (loading || target.closest("[inert]")) return;
   if (action === "start") {
     if (saved || invalidSave) {
       panel = "restart";
@@ -444,14 +503,19 @@ ui.addEventListener("pointerdown", (event) => {
   const target = (event.target as HTMLElement).closest<HTMLElement>(
     "[data-pad]",
   );
-  if (!target || !world.active) return;
+  if (!target || !world.active || padPointer !== null) return;
   event.preventDefault();
+  padPointer = event.pointerId;
   const [x, y] = target.dataset.pad!.split(",").map(Number);
   target.setPointerCapture(event.pointerId);
   world.pad(x, y);
 });
-for (const ev of ["pointerup", "pointercancel", "lostpointercapture"])
-  ui.addEventListener(ev, () => world.pad(0, 0));
+for (const ev of ["pointerup", "pointercancel", "lostpointercapture"] as const)
+  ui.addEventListener(ev, (event) => {
+    if (event.pointerId !== padPointer) return;
+    padPointer = null;
+    world.pad(0, 0);
+  });
 const movement = new Set([
   "w",
   "a",
@@ -510,9 +574,9 @@ window.addEventListener("keydown", (event) => {
     world.key(key, true);
   }
   if (
-    (key === "e" || event.key === " ") &&
-    !event.repeat &&
-    !(event.target instanceof HTMLButtonElement)
+    (key === "e" ||
+      (event.key === " " && !(event.target instanceof HTMLButtonElement))) &&
+    !event.repeat
   ) {
     event.preventDefault();
     world.interact();

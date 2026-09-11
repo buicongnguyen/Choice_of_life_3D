@@ -517,14 +517,14 @@ body[data-mode="title"] #world {
 }
 .dpad {
   display: grid;
-  grid-template-columns: 40px 40px 40px;
-  grid-template-rows: 40px 40px 40px;
+  grid-template-columns: 44px 44px 44px;
+  grid-template-rows: 44px 44px 44px;
   gap: 3px;
   pointer-events: auto;
   opacity: 0.9;
 }
 .dpad button {
-  min-height: 40px;
+  min-height: 44px;
   border-radius: 12px;
   background: #fff9e7d9;
   border: 1px solid #afc5af;
@@ -1498,6 +1498,32 @@ body[data-panel="choice"] #world {
 }
 #world {
   transition: none;
+}
+.screen-ui[inert] {
+  pointer-events: none;
+}
+.chapter-heading h1:focus {
+  outline: none;
+}
+.discovery-progress {
+  margin-top: 4px;
+}
+body[data-panel="choice"] .objective {
+  display: none;
+}
+/* Essential story context remains available even on short phone screens. */
+body[data-panel="choice"] .dialogue {
+  max-height: min(49dvh, var(--dialogue-limit, 49dvh));
+}
+body[data-panel="choice"] .dialogue .context {
+  display: block;
+  font-size: 12px;
+}
+body[data-panel="choice"] .dialogue .prompt {
+  font-size: 14px;
+}
+body[data-panel="choice"] .choice small {
+  font-size: 11px;
 }
 @media (max-width: 700px) {
   .title-copy h1 {

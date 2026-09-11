@@ -2,8 +2,16 @@ import * as T from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { chapters, careerFor } from "./content";
 import { resolved, chapterDone, type Life } from "./core";
+import {
+  free,
+  clearSegment,
+  findPath,
+  recoverPosition,
+  surfaceHeight,
+  navigation,
+  type Collider,
+} from "./navigation";
 
-type Collider = { x: number; z: number; w: number; d: number };
 export type Place = {
   id: string;
   label: string;
@@ -65,6 +73,8 @@ export class World {
   private keys = new Set<string>();
   private touch = { x: 0, y: 0 };
   private walking = false;
+  private gait = 0;
+  private press?: { id: number; x: number; y: number };
   private obstacle?: T.Mesh;
   private sparkle?: T.Points;
   private observer: ResizeObserver;
@@ -124,10 +134,12 @@ export class World {
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(host);
     this.resize();
-    this.renderer.domElement.addEventListener("pointerup", (event) => {
-      if (!this.active || event.button !== 0) return;
-      this.tap(event.clientX, event.clientY);
-    });
+    this.renderer.domElement.addEventListener("pointerdown", this.pointerDown);
+    this.renderer.domElement.addEventListener("pointerup", this.pointerUp);
+    this.renderer.domElement.addEventListener(
+      "pointercancel",
+      this.pointerCancel,
+    );
     this.frame = requestAnimationFrame(this.tick);
   }
   async init() {
@@ -255,10 +267,12 @@ export class World {
       skins[state.identity.skin],
       state.chapter >= 10 ? 0xd5d5cd : 0x47332d,
     );
+    const position = recoverPosition(state.position, this.colliders);
+    this.gait = 0;
     this.playerPosition.set(
-      state.position.x,
-      this.surface(state.position.x, state.position.z) - 0.03 * chapter.scale,
-      state.position.z,
+      position.x,
+      this.surface(position.x, position.z) - 0.03 * chapter.scale,
+      position.z,
     );
     this.player.root.position.copy(this.playerPosition);
     this.cast.add(this.player.root);
@@ -346,7 +360,7 @@ export class World {
     chapter.discoveries.forEach((label, i) => {
       const root = new T.Group();
       const [x, z] = coords[i];
-      root.position.set(x, 0.17, z);
+      root.position.set(x, this.surface(x, z), z);
       const color = Object.values(palette)[i];
       const gem = this.clone(items[i]);
       gem.position.y = 0.18;
@@ -367,7 +381,7 @@ export class World {
       );
     });
     const exit = new T.Group();
-    exit.position.set(5.2, 0.17, -0.3);
+    exit.position.set(5.2, this.surface(5.2, -0.3), -0.3);
     const arch = new T.Mesh(
       new T.TorusGeometry(0.53, 0.06, 8, 32, Math.PI),
       material(0xe9b74f),
@@ -415,7 +429,7 @@ export class World {
     if (state.chapter > 0) {
       const pet = this.clone(cat);
       pet.scale.setScalar(0.7);
-      pet.position.set(-3.4, 0.17, -1.6);
+      pet.position.set(-3.4, this.surface(-3.4, -1.6), -1.6);
       pet.rotation.y = 0.8;
       this.cast.add(pet);
     }
@@ -542,13 +556,16 @@ export class World {
   }
   nearest() {
     let result: Place | undefined,
-      distance = 1.55;
+      distance: number = navigation.reach;
     for (const place of this.places()) {
       const d = Math.hypot(
         place.x - this.playerPosition.x,
         place.z - this.playerPosition.z,
       );
-      if (d < distance) {
+      if (
+        d < distance &&
+        clearSegment(this.playerPosition, place, this.colliders)
+      ) {
         result = place;
         distance = d;
       }
@@ -583,84 +600,46 @@ export class World {
     this.target = [];
     this.pending = null;
     this.walking = false;
+    this.press = undefined;
   }
   private surface(x: number, z: number) {
     const scene = this.state ? chapters[this.state.chapter].scene : "home";
-    if (scene === "home")
-      return Math.abs(x) < 2.85 && Math.abs(z) < 2 ? 0.16 : 0.1;
-    if (scene === "school" || scene === "campus")
-      return Math.abs(x) < 2.75 && Math.abs(z) < 1.75 ? 0.15 : 0.1;
-    if (scene === "office")
-      return Math.abs(x) < 2.9 && Math.abs(z) < 2 ? 0.15 : 0.1;
-    return Math.abs(x) < 5.4 && Math.abs(z - 0.25) < 0.85
-      ? 0.105
-      : Math.abs(z - 1.65) < 0.28
-        ? 0.14
-        : 0.06;
+    return surfaceHeight(scene, x, z);
   }
   private free(x: number, z: number) {
-    return (
-      Math.abs(x) < 5.85 &&
-      Math.abs(z) < 4.05 &&
-      !this.colliders.some(
-        (c) =>
-          Math.abs(x - c.x) < c.w / 2 + 0.24 &&
-          Math.abs(z - c.z) < c.d / 2 + 0.24,
-      )
-    );
+    return free({ x, z }, this.colliders);
   }
   private path(x: number, z: number) {
-    const step = 0.35;
-    const grid = (v: number) => Math.round(v / step);
-    const start = [grid(this.playerPosition.x), grid(this.playerPosition.z)],
-      end = [grid(x), grid(z)];
-    const key = (a: number, b: number) => `${a},${b}`;
-    const first = key(...(start as [number, number])),
-      last = key(...(end as [number, number]));
-    const previous = new Map<string, string | null>([[first, null]]),
-      queue = [start];
-    let found: string | undefined;
-    for (let i = 0; i < queue.length && i < 2500; i++) {
-      const [a, b] = queue[i],
-        k = key(a, b);
-      if (k === last) {
-        found = k;
-        break;
-      }
-      for (const [dx, dz] of [
-        [1, 0],
-        [-1, 0],
-        [0, 1],
-        [0, -1],
-      ]) {
-        const nx = a + dx,
-          nz = b + dz,
-          nk = key(nx, nz);
-        if (!previous.has(nk) && this.free(nx * step, nz * step)) {
-          previous.set(nk, k);
-          queue.push([nx, nz]);
-        }
-      }
-    }
-    if (!found) return [];
-    const route: T.Vector3[] = [];
-    for (
-      let k: string | null = found;
-      k && k !== first;
-      k = previous.get(k) ?? null
-    ) {
-      const [a, b] = k.split(",").map(Number);
-      route.unshift(new T.Vector3(a * step, 0.17, b * step));
-    }
-    return route;
+    return findPath(this.playerPosition, { x, z }, this.colliders).map(
+      (p) => new T.Vector3(p.x, 0, p.z),
+    );
   }
   go(id: string) {
     const p = this.places().find((p) => p.id === id);
     if (!p) return false;
     this.target = this.path(p.x, p.z);
-    this.pending = id;
-    return this.target.length > 0 || this.nearest()?.id === id;
+    const reachable = this.target.length > 0;
+    this.pending = reachable ? id : null;
+    return reachable;
   }
+  private pointerDown = (event: PointerEvent) => {
+    if (!this.active || event.button !== 0 || this.press) return;
+    this.press = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    this.renderer.domElement.setPointerCapture(event.pointerId);
+  };
+  private pointerUp = (event: PointerEvent) => {
+    const press = this.press;
+    if (!press || press.id !== event.pointerId) return;
+    this.press = undefined;
+    if (
+      this.active &&
+      Math.hypot(event.clientX - press.x, event.clientY - press.y) <= 10
+    )
+      this.tap(event.clientX, event.clientY);
+  };
+  private pointerCancel = () => {
+    this.press = undefined;
+  };
   private tap(x: number, y: number) {
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.raycaster.setFromCamera(
@@ -721,22 +700,44 @@ export class World {
       0,
       -sx * 0.486 + sy * 0.874,
     );
+    let routeDistance = Infinity;
     if (direction.lengthSq() === 0 && this.target.length) {
       direction.subVectors(this.target[0], this.playerPosition);
       direction.y = 0;
-      if (direction.length() < 0.09) {
+      routeDistance = direction.length();
+      if (routeDistance < 0.001) {
         this.target.shift();
         direction.set(0, 0, 0);
       }
     }
-    this.walking = direction.lengthSq() > 0.0001;
-    if (this.walking) {
+    const beforeX = this.playerPosition.x,
+      beforeZ = this.playerPosition.z;
+    if (direction.lengthSq() > 0.000001) {
       direction.normalize();
-      const amount = this.speed * dt;
+      const amount = Math.min(this.speed * dt, routeDistance);
       const x = this.playerPosition.x + direction.x * amount,
         z = this.playerPosition.z + direction.z * amount;
-      if (this.free(x, this.playerPosition.z)) this.playerPosition.x = x;
-      if (this.free(this.playerPosition.x, z)) this.playerPosition.z = z;
+      if (clearSegment(this.playerPosition, { x, z }, this.colliders)) {
+        this.playerPosition.x = x;
+        this.playerPosition.z = z;
+      } else {
+        if (
+          clearSegment(
+            this.playerPosition,
+            { x, z: this.playerPosition.z },
+            this.colliders,
+          )
+        )
+          this.playerPosition.x = x;
+        if (
+          clearSegment(
+            this.playerPosition,
+            { x: this.playerPosition.x, z },
+            this.colliders,
+          )
+        )
+          this.playerPosition.z = z;
+      }
       const angle = Math.atan2(direction.x, direction.z),
         current = this.player.root.rotation.y;
       this.player.root.rotation.y =
@@ -744,6 +745,12 @@ export class World {
         Math.atan2(Math.sin(angle - current), Math.cos(angle - current)) *
           Math.min(1, dt * 14);
     }
+    const traveled = Math.hypot(
+      this.playerPosition.x - beforeX,
+      this.playerPosition.z - beforeZ,
+    );
+    this.walking = traveled > 0.00001;
+    this.gait += (traveled * 4) / this.player.scale;
     this.playerPosition.y =
       this.surface(this.playerPosition.x, this.playerPosition.z) -
       0.03 * this.player.scale;
@@ -755,7 +762,8 @@ export class World {
         Math.hypot(
           place.x - this.playerPosition.x,
           place.z - this.playerPosition.z,
-        ) < 1.3
+        ) < navigation.arrival &&
+        clearSegment(this.playerPosition, place, this.colliders)
       ) {
         const id = this.pending;
         this.pending = null;
@@ -771,6 +779,9 @@ export class World {
     }
     if (this.obstacle?.visible) {
       this.obstacle.position.x = Math.sin(this.clock * 0.5) * 1.7;
+      this.obstacle.position.y =
+        this.surface(this.obstacle.position.x, this.obstacle.position.z) +
+        0.035;
       if (this.playerPosition.distanceTo(this.obstacle.position) < 0.57)
         this.onHazard();
     }
@@ -781,9 +792,12 @@ export class World {
     }
   }
   private animate(actor: Actor, moving: boolean, time: number) {
-    const swing = moving ? Math.sin(time * 10) * 0.38 : 0;
+    const baby = actor === this.player && this.state?.chapter === 0;
+    const swing = moving ? Math.sin(this.gait) * (baby ? 0.14 : 0.38) : 0;
     actor.limbs.forEach((limb, i) => {
-      if (limb) limb.rotation.x = (i === 0 || i === 3 ? 1 : -1) * swing;
+      if (limb)
+        limb.rotation.x =
+          baby && i >= 2 ? 0 : (i === 0 || i === 3 ? 1 : -1) * swing;
     });
     if (actor.head)
       actor.head.rotation.z = this.reducedMotion
@@ -823,11 +837,23 @@ export class World {
       position: { x: this.playerPosition.x, z: this.playerPosition.z },
       models: [...this.models.keys()],
       playerVisible: !!this.player?.root.visible,
+      scale: this.player?.scale,
+      walking: this.walking,
+      routePoints: this.target.length,
     };
   }
   dispose() {
     cancelAnimationFrame(this.frame);
     this.observer.disconnect();
+    this.renderer.domElement.removeEventListener(
+      "pointerdown",
+      this.pointerDown,
+    );
+    this.renderer.domElement.removeEventListener("pointerup", this.pointerUp);
+    this.renderer.domElement.removeEventListener(
+      "pointercancel",
+      this.pointerCancel,
+    );
     this.release(this.room);
     this.release(this.cast);
     this.release(this.fx);

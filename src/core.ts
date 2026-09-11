@@ -57,7 +57,13 @@ function apply(s: Life, delta: Partial<Scores>): Scores {
   return actual;
 }
 export function choose(state: Life, encounter: number, option: number): Life {
-  if (state.complete || resolved(state, encounter)) return state;
+  if (
+    state.complete ||
+    !Number.isInteger(encounter) ||
+    !Number.isInteger(option) ||
+    resolved(state, encounter)
+  )
+    return state;
   const pick = chapters[state.chapter]?.encounters[encounter]?.options[option];
   if (!pick) return state;
   const s = structuredClone(state),
@@ -92,13 +98,19 @@ export function discover(state: Life, index: number): Life {
     id: `found:${id}`,
     chapter: s.chapter,
     title: chapters[s.chapter].discoveries[index],
-    text: "You made a little time for something that mattered.",
+    text: `${chapters[s.chapter].discoveries[index]}: a small moment for ${index === 0 ? "your wellbeing" : index === 1 ? "a little joy" : "tomorrow's security"}.`,
     effect,
   });
   return s;
 }
 export function hazard(state: Life): Life {
-  if (state.complete || state.hazards.includes(state.chapter)) return state;
+  if (
+    state.complete ||
+    state.chapter < 2 ||
+    state.chapter > 9 ||
+    state.hazards.includes(state.chapter)
+  )
+    return state;
   const s = structuredClone(state);
   s.hazards.push(s.chapter);
   apply(s, { health: -3 });
@@ -177,7 +189,8 @@ export function parseLife(raw: string | null): Life | null {
       return null;
     const expectedFacts: Facts = {};
     for (const [id, option] of Object.entries(s.choices)) {
-      if (!/^\d+:\d+$/.test(id) || !Number.isInteger(option)) return null;
+      if (!/^(0|[1-9]\d*):(0|1)$/.test(id) || !Number.isInteger(option))
+        return null;
       const [ch, en] = id.split(":").map(Number);
       const pick = chapters[ch]?.encounters[en]?.options[option];
       if (!pick || ch > s.chapter) return null;
@@ -193,6 +206,8 @@ export function parseLife(raw: string | null): Life | null {
     if (s.complete && (s.chapter !== 11 || !chapterDone(s))) return null;
     if (
       !s.facts ||
+      typeof s.facts !== "object" ||
+      Array.isArray(s.facts) ||
       JSON.stringify(Object.entries(s.facts).sort()) !==
         JSON.stringify(Object.entries(expectedFacts).sort())
     )
@@ -204,7 +219,7 @@ export function parseLife(raw: string | null): Life | null {
       s.discoveries.some(
         (id) =>
           typeof id !== "string" ||
-          !/^\d+:[0-2]$/.test(id) ||
+          !/^(0|[1-9]\d*):[0-2]$/.test(id) ||
           Number(id.split(":")[0]) > s.chapter,
       )
     )
@@ -212,15 +227,20 @@ export function parseLife(raw: string | null): Life | null {
     if (
       !Array.isArray(s.hazards) ||
       s.hazards.length > 12 ||
-      s.hazards.some((n) => !Number.isInteger(n) || n < 0 || n > s.chapter)
+      new Set(s.hazards).size !== s.hazards.length ||
+      s.hazards.some(
+        (n) => !Number.isInteger(n) || n < 2 || n > 9 || n > s.chapter,
+      )
     )
       return null;
     if (
       !Array.isArray(s.memories) ||
-      s.memories.length > 60 ||
+      s.memories.length !==
+        Object.keys(s.choices).length + s.discoveries.length ||
       s.memories.some(
         (m) =>
           !m ||
+          typeof m.id !== "string" ||
           typeof m.text !== "string" ||
           m.text.length > 600 ||
           typeof m.title !== "string" ||
@@ -231,6 +251,35 @@ export function parseLife(raw: string | null): Life | null {
       )
     )
       return null;
+    const memoryIds = new Set<string>();
+    for (const memory of s.memories) {
+      if (memoryIds.has(memory.id)) return null;
+      memoryIds.add(memory.id);
+      const discovery = memory.id.startsWith("found:");
+      const id = discovery ? memory.id.slice(6) : memory.id;
+      if (
+        discovery ? !s.discoveries.includes(id) : !Object.hasOwn(s.choices, id)
+      )
+        return null;
+      const [chapter, index] = id.split(":").map(Number);
+      if (memory.chapter !== chapter) return null;
+      const nominal: Partial<Scores> = discovery
+        ? { [scoreKeys[index]]: 4 }
+        : chapters[chapter].encounters[index].options[s.choices[id]].effect;
+      if (
+        !memory.effect ||
+        scoreKeys.some((key) => {
+          const actual = memory.effect[key],
+            expected = nominal[key] ?? 0;
+          return (
+            !Number.isFinite(actual) ||
+            Math.abs(actual) > Math.abs(expected) ||
+            (actual !== 0 && Math.sign(actual) !== Math.sign(expected))
+          );
+        })
+      )
+        return null;
+    }
     return s;
   } catch {
     return null;

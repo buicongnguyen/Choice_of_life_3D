@@ -66,7 +66,7 @@ export const chapters: Chapter[] = [
     discoveries: [
       "A soft blanket",
       "A favourite rattle",
-      "A little piggy bank",
+      "Coins for your first savings",
     ],
     encounters: [
       e(
@@ -219,7 +219,11 @@ export const chapters: Chapter[] = [
     intro:
       "New shoes. New names. Somewhere in this room, someone feels just as nervous as you do.",
     scale: 0.7,
-    discoveries: ["A water bottle", "A library storybook", "A packed lunch"],
+    discoveries: [
+      "A healthy apple",
+      "A library storybook",
+      "Savings from a packed lunch",
+    ],
     encounters: [
       e(
         "Maya",
@@ -441,7 +445,7 @@ export const chapters: Chapter[] = [
     place: "The learning quarter",
     scene: "campus",
     intro:
-      "There are several doors into adulthood. Choose a way of learning, then a kind of work that interests you.",
+      "There are several doors into adulthood. Explore a way of learning and a kind of work that interests you, in either order.",
     scale: 1,
     discoveries: ["A campus walk", "A new creative idea", "A training bursary"],
     encounters: [
@@ -643,11 +647,11 @@ export const chapters: Chapter[] = [
         "“There is no one way to build a home. What would you like yours to be?”",
         [
           o(
-            "Build a life with your partner",
-            "Choose commitment and share the work of a home.",
+            "Plan a shared life with a partner",
+            "Choose commitment, now or when you meet someone. Share the work of a home.",
             { happiness: 8, money: -7 },
             ["home", "partnered"],
-            "You chose a shared life with your partner, one ordinary day at a time.",
+            "You chose to build a shared life, one ordinary day at a time.",
           ),
           o(
             "Stay single and close to friends",

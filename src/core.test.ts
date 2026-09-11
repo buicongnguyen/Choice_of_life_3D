@@ -45,10 +45,58 @@ test("discoveries and hazards resolve once, scores remain finite and bounded", (
   assert.equal(discover(s, 0), s);
   s = hazard(s);
   assert.equal(hazard(s), s);
+  assert.equal(s.hazards.length, 0, "nursery has no hazard");
+  for (let chapter = 0; chapter < 2; chapter++)
+    s = advance(choose(choose(s, 0, 0), 1, 0));
+  const before = s.scores.health;
+  s = hazard(s);
+  assert.equal(s.scores.health, before - 3);
+  assert.equal(hazard(s), s);
+  assert.ok(parseLife(JSON.stringify(s)));
   for (const score of Object.values(s.scores))
     assert.ok(Number.isFinite(score) && score >= 0 && score <= 100);
   assert.equal(discover(s, -1), s);
   assert.equal(choose(s, 4, 0), s);
+});
+
+test("saves reject duplicate, noncanonical and mismatched activity records", () => {
+  const valid = discover(choose(fresh(), 0, 0), 1);
+  const edits = [
+    (s: typeof valid) => {
+      s.choices["00:0"] = s.choices["0:0"];
+      delete s.choices["0:0"];
+    },
+    (s: typeof valid) => {
+      s.discoveries = ["00:1"];
+    },
+    (s: typeof valid) => {
+      s.memories[0].id = "invented";
+    },
+    (s: typeof valid) => {
+      s.memories[0].effect.health = Infinity;
+    },
+    (s: typeof valid) => {
+      s.memories[0].effect.health = -1;
+    },
+    (s: typeof valid) => {
+      s.memories[1] = structuredClone(s.memories[0]);
+    },
+    (s: typeof valid) => {
+      s.memories = [];
+    },
+    (s: typeof valid) => {
+      s.hazards = [0, 0];
+    },
+  ];
+  for (const edit of edits) {
+    const broken = structuredClone(valid);
+    edit(broken);
+    assert.equal(parseLife(JSON.stringify(broken)), null);
+  }
+  // Original 0.1.0 discovery prose remains a supported save format.
+  valid.memories[1].text =
+    "You made a little time for something that mattered.";
+  assert.ok(parseLife(JSON.stringify(valid)));
 });
 test("invalid or tampered saves are rejected without mutation", () => {
   const s = fresh(),
