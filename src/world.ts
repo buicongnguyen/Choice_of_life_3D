@@ -4,6 +4,7 @@ import { lightWorld } from "./lighting";
 import { modelURL } from "./asset-url";
 import { chapters, careerFor } from "./content";
 import { resolved, chapterDone, type Life } from "./core";
+import { activity, guestNames, keepsakes, record } from "./journey";
 import {
   free,
   clearSegment,
@@ -19,7 +20,7 @@ export type Place = {
   label: string;
   x: number;
   z: number;
-  kind: "person" | "discovery" | "exit";
+  kind: "person" | "discovery" | "exit" | "activity" | "guest" | "companion";
   index: number;
 };
 type Actor = {
@@ -89,6 +90,10 @@ export class World {
   private lastNearby = "";
   private timeToSave = 0;
   private releaseLighting: () => void;
+  private focusPoint?: T.Vector3;
+  private conversationId: string | null = null;
+  private acknowledgement = 0;
+  closeups = true;
 
   constructor(private host: HTMLElement) {
     this.renderer = new T.WebGLRenderer({
@@ -225,6 +230,7 @@ export class World {
       this.load("female"),
       this.load("cat"),
       ...props[state.chapter].map((n) => this.load(n)),
+      ...["tin", "boat", "book", "plant"].map((n) => this.load(n)),
     ]);
     if (ticket !== this.generation) return;
     this.release(this.room);
@@ -234,6 +240,8 @@ export class World {
     this.actors = [];
     this.obstacle = undefined;
     this.sparkle = undefined;
+    this.focusPoint = undefined;
+    this.conversationId = null;
     this.room.add(this.clone(scenery));
     this.colliders = this.bounds[chapter.scene] ?? [];
     this.state = state;
@@ -316,7 +324,7 @@ export class World {
       );
     });
     if (state.chapter === 7) {
-      const names = ["Avery", "Quinn", "Morgan"];
+      const names = guestNames;
       const colors = [0x7499bb, 0xb98298, 0xe4b451];
       names.forEach((name, i) => {
         const a = this.makeActor(
@@ -334,10 +342,50 @@ export class World {
         a.root.rotation.y = Math.PI;
         this.cast.add(a.root);
         this.actors.push(a);
-        const label = this.label(name, 0xffffff, 0x214d48);
-        label.position.y = 2.8;
-        a.root.add(label);
+        this.addPoint(
+          {
+            id: `guest:${i}`,
+            label: name,
+            x: -2 + i * 2,
+            z: 2.8,
+            kind: "guest",
+            index: i,
+          },
+          a.root,
+          2.8,
+        );
       });
+    }
+    if (state.chapter >= 8 && state.facts.home === "partnered") {
+      const i = guestNames.indexOf(state.facts.partner);
+      if (i >= 0) {
+        const spouse = this.makeActor(
+          state.identity.gender === "male" ? female : male,
+          state.chapter >= 10 ? 0.95 : 0.91,
+          [0x7499bb, 0xb98298, 0xe4b451][i],
+          skins[(state.identity.skin + i + 1) % 4],
+          state.chapter >= 10 ? 0xd2d0c7 : [0x4c3329, 0x332829, 0x965c36][i],
+        );
+        spouse.root.position.set(
+          3.3,
+          this.surface(3.3, 2.6) - 0.03 * spouse.scale,
+          2.6,
+        );
+        this.cast.add(spouse.root);
+        this.actors.push(spouse);
+        this.addPoint(
+          {
+            id: "companion:0",
+            label: state.facts.partner,
+            x: 3.3,
+            z: 2.6,
+            kind: "companion",
+            index: 0,
+          },
+          spouse.root,
+          2.8,
+        );
+      }
     }
     const coords = [
       [-3.1, 0.9],
@@ -362,7 +410,14 @@ export class World {
       root.add(halo);
       this.fx.add(root);
       this.addPoint(
-        { id: `discovery:${i}`, label, x, z, kind: "discovery", index: i },
+        {
+          id: i === 1 ? "activity:0" : `discovery:${i}`,
+          label: i === 1 ? activity(state).title : label,
+          x,
+          z,
+          kind: i === 1 ? "activity" : "discovery",
+          index: i,
+        },
         root,
         1.05,
       );
@@ -398,20 +453,45 @@ export class World {
       exit,
       1.8,
     );
-    if (state.chapter > 1 && state.chapter < 10) {
-      this.obstacle = new T.Mesh(
-        new T.SphereGeometry(0.4, 16, 8),
-        new T.MeshStandardMaterial({
-          color: 0x847b9f,
-          transparent: true,
-          opacity: 0.55,
-          roughness: 1,
-        }),
+    // Legacy hazard records remain readable, without a repeated unrelated puddle.
+    const treasures = keepsakes(state).slice(-3);
+    if (treasures.length) {
+      const shelf = new T.Group();
+      shelf.position.set(0, 2.6, -4.4);
+      const board = new T.Mesh(
+        new T.BoxGeometry(3.3, 0.12, 0.6),
+        material(0x936f4b),
       );
-      this.obstacle.scale.set(1, 0.09, 1);
-      this.obstacle.position.set(0, 0.19, 0.2);
-      this.obstacle.userData.ownedGeometry = true;
-      this.fx.add(this.obstacle);
+      board.userData.ownedGeometry = true;
+      shelf.add(board);
+      treasures.forEach((treasure, i) => {
+        const index = ["tin", "boat", "book", "plant"].indexOf(treasure.icon);
+        const prop = this.clone(items[3 + (index < 0 ? 2 : index)]);
+        prop.scale.setScalar(0.45);
+        prop.position.set((i - 1) * 1.05, 0.1, 0);
+        shelf.add(prop);
+      });
+      const label = this.label("Your keepsake shelf", 0xfff7e6, 0x214d48);
+      label.position.y = 1.05;
+      shelf.add(label);
+      this.fx.add(shelf);
+    }
+    if (state.chapter === 6 || state.chapter === 9) {
+      const sign = this.label(
+        state.facts.field === "care"
+          ? "Community clinic"
+          : state.facts.field === "technology"
+            ? "Software studio"
+            : "Neighbourhood business",
+        0xfff7e6,
+        0x214d48,
+      );
+      sign.position.set(0, 3.2, -3.8);
+      this.fx.add(sign);
+      const work = this.clone(items[state.facts.field === "care" ? 6 : 5]);
+      work.position.set(-4.5, 1.25, -2.3);
+      work.scale.setScalar(0.4);
+      this.fx.add(work);
     }
     if (state.chapter > 0) {
       const pet = this.clone(cat);
@@ -501,11 +581,13 @@ export class World {
   }
   private addPoint(place: Place, root: T.Group, height: number) {
     const marker = this.label(
-      place.kind === "person"
+      ["person", "guest", "companion"].includes(place.kind)
         ? `${place.label} · talk`
-        : place.kind === "exit"
-          ? place.label
-          : ["♥ Health", "✦ Joy", "● Money"][place.index],
+        : place.kind === "activity"
+          ? "✦ " + place.label
+          : place.kind === "exit"
+            ? place.label
+            : ["♥ Health", "✦ Joy", "● Money"][place.index],
       place.kind === "person" ? 0xfff7e6 : 0x214d48,
       place.kind === "person" ? 0x214d48 : 0xfff7e6,
     );
@@ -523,6 +605,13 @@ export class World {
         );
       if (place.kind === "person")
         marker.material.opacity = resolved(state, place.index) ? 0.45 : 1;
+      if (place.kind === "activity") {
+        marker.material.opacity = record(state).complete ? 0.5 : 1;
+      }
+      if (place.kind === "guest")
+        marker.material.opacity = state.meetings.includes(place.label)
+          ? 0.65
+          : 1;
       if (place.kind === "exit") {
         root.visible = chapterDone(state);
       }
@@ -535,6 +624,9 @@ export class World {
       .filter(
         (p) =>
           p.root.visible &&
+          (p.place.kind !== "activity" ||
+            !this.state ||
+            !record(this.state).complete) &&
           (p.place.kind !== "person" ||
             !this.state ||
             !resolved(this.state, p.place.index)),
@@ -664,12 +756,39 @@ export class World {
     if (!w || !h) return;
     this.renderer.setSize(w, h);
     const aspect = w / h;
-    const span = Math.max(10.8, 17.8 / aspect);
+    const focused = this.focusPoint && this.closeups;
+    const span = focused
+      ? Math.max(5.7, 7.5 / aspect)
+      : Math.max(10.8, 17.8 / aspect);
+    const center = focused ? this.focusPoint! : new T.Vector3(0, 0.2, 0);
+    this.camera.position.copy(center).add(new T.Vector3(10, 14, 18));
+    this.camera.lookAt(center);
     this.camera.left = (-span * aspect) / 2;
     this.camera.right = (span * aspect) / 2;
     this.camera.top = span / 2;
     this.camera.bottom = -span / 2;
     this.camera.updateProjectionMatrix();
+  }
+  focus(id: string | null) {
+    if (id !== this.conversationId) {
+      this.acknowledgement = 0;
+      for (const actor of this.actors)
+        if (actor.head) actor.head.rotation.x = 0;
+    }
+    this.conversationId = id;
+    // The dialogue already identifies the subject; labels should not cover faces in the close-up.
+    for (const point of this.points) point.marker.visible = !id;
+    const point = this.points.find((p) => p.place.id === id);
+    this.focusPoint = point
+      ? point.root.position
+          .clone()
+          .lerp(this.playerPosition, 0.5)
+          .add(new T.Vector3(0, 1, 0))
+      : undefined;
+    this.resize();
+  }
+  acknowledge() {
+    this.acknowledgement = this.reducedMotion ? 0 : 1.5;
   }
   private step(dt: number) {
     if (!this.active || !this.player) return;
@@ -803,6 +922,16 @@ export class World {
       this.animate(this.player, this.active && this.walking, this.clock);
     for (let i = 0; i < this.actors.length; i++)
       this.animate(this.actors[i], false, this.clock + i);
+    if (this.acknowledgement > 0 && !document.hidden) {
+      this.acknowledgement = Math.max(0, this.acknowledgement - dt);
+      const point = this.points.find((p) => p.place.id === this.conversationId);
+      const actor = this.actors.find((a) => a.root === point?.root);
+      if (actor?.head && !this.reducedMotion)
+        actor.head.rotation.x = Math.sin(this.acknowledgement * 5) * 0.08;
+    } else {
+      for (const actor of this.actors)
+        if (actor.head) actor.head.rotation.x = 0;
+    }
     if (this.active && !this.reducedMotion) {
       for (const p of this.points)
         if (p.place.kind === "discovery") {

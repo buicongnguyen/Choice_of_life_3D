@@ -2,6 +2,7 @@ import { chromium } from "@playwright/test";
 import assert from "node:assert/strict";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 const base = process.env.GAME_URL || "http://127.0.0.1:4194/";
+const version = JSON.parse(await readFile("package.json", "utf8")).version;
 const manifest = JSON.parse(
   await readFile("public/models/manifest.json", "utf8"),
 );
@@ -79,6 +80,7 @@ try {
   await page.waitForFunction(() => window.lifeDiagnostics?.loading === false);
   await page.locator("[data-action=start]").click();
   await page.waitForFunction(() => !window.lifeDiagnostics.loading);
+  await page.locator('[role="dialog"] [data-action="close"]').last().click();
   const position = await page.evaluate(
     () => window.lifeDiagnostics.render.position,
   );
@@ -113,7 +115,7 @@ try {
       .filter((url) => url.includes(".glb")),
   );
   assert.ok(
-    urls.length > 0 && urls.every((url) => url.includes("v=0.2.0")),
+    urls.length > 0 && urls.every((url) => url.includes(`v=${version}`)),
     "New art must bypass old cached GLBs",
   );
   assert.deepEqual(errors, []);

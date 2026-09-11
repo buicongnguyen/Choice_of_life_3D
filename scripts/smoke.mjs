@@ -12,6 +12,8 @@ page.on("response", (r) => {
 });
 const diagnostic = () => page.evaluate(() => window.lifeDiagnostics);
 async function travel(id) {
+  if (["briefing", "response", "pause"].includes((await diagnostic()).panel))
+    await page.locator('[role="dialog"] [data-action="close"]').last().click();
   await page.locator("[data-action=explore]").click();
   await page.locator(`[data-place="${id}"]`).click();
 }
@@ -26,6 +28,7 @@ try {
       window.lifeDiagnostics.mode === "play",
   );
   const before = (await diagnostic()).render.position;
+  await page.locator('[role="dialog"] [data-action="close"]').last().click();
   await page.keyboard.down("d");
   await page.waitForTimeout(250);
   await page.keyboard.up("d");
@@ -35,6 +38,13 @@ try {
     "Keyboard movement affects ground coordinates",
   );
   for (let chapter = 0; chapter < 12; chapter++) {
+    if (chapter === 7)
+      for (let i = 0; i < 3; i++) {
+        await travel(`guest:${i}`);
+        await page.waitForFunction(
+          () => window.lifeDiagnostics.panel === "response",
+        );
+      }
     for (let encounter = 0; encounter < 2; encounter++) {
       await travel(`person:${encounter}`);
       await page.waitForFunction(
@@ -92,6 +102,7 @@ try {
   await mobile.screenshot({ path: "docs/captures/title-mobile.png" });
   await mobile.locator("[data-action=start]").tap();
   await mobile.waitForFunction(() => window.lifeDiagnostics.loading === false);
+  await mobile.locator('[role="dialog"] [data-action="close"]').last().click();
   await mobile.locator("[data-action=explore]").tap();
   await mobile.locator('[data-place="person:0"]').tap();
   await mobile.waitForFunction(
@@ -113,6 +124,7 @@ try {
     false,
   );
   await mobile.locator('[data-action=choose][data-index="1"]').tap();
+  await mobile.locator('[role="dialog"] [data-action="close"]').last().click();
   await mobile.locator("[data-action=pause]").tap();
   assert.equal(
     await mobile.evaluate(() => window.lifeDiagnostics.panel),

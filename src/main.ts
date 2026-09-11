@@ -1,6 +1,23 @@
 import "./style.css";
+import "./story.css";
 import { World, type Place } from "./world";
 import { chapters, careerFor, type Scores } from "./content";
+import {
+  activity,
+  record,
+  conversation,
+  canChoose,
+  guestNames,
+  guestLines,
+  objectives,
+} from "./journey";
+import {
+  activityPanel,
+  briefingPanel,
+  responsePanel,
+  keepsakeCards,
+  chapterTimeline,
+} from "./story-ui";
 import {
   newLife,
   parseLife,
@@ -13,6 +30,10 @@ import {
   biography,
   SAVE_KEY,
   scoreKeys,
+  perform,
+  undoActivity,
+  assistActivity,
+  meet,
   type Life,
   type Identity,
 } from "./core";
@@ -47,8 +68,21 @@ let identity: Identity = saved?.identity ?? {
 };
 let state: Life = saved ?? newLife(identity);
 let mode: "title" | "play" | "ending" = "title";
-type Panel = "none" | "choice" | "journal" | "explore" | "pause" | "restart";
+type Panel =
+  | "none"
+  | "choice"
+  | "journal"
+  | "explore"
+  | "pause"
+  | "restart"
+  | "activity"
+  | "briefing"
+  | "response";
 let panel: Panel = "none";
+let focusedPlace: string | null = null;
+let response = { title: "", text: "", effect: {} as Partial<Scores>, note: "" };
+let largeText = false,
+  closeups = true;
 let activeEncounter = 0,
   loading = true,
   loadError = "",
@@ -63,6 +97,8 @@ try {
     localStorage.getItem("choice-of-life-3d-settings") ?? "{}",
   );
   sound = prefs.sound === true;
+  largeText = prefs.largeText === true;
+  closeups = prefs.closeups !== false;
   reduced = typeof prefs.reduced === "boolean" ? prefs.reduced : reduced;
   pace = ["gentle", "normal", "brisk"].includes(prefs.pace)
     ? prefs.pace
@@ -108,12 +144,14 @@ function prefs() {
   try {
     localStorage.setItem(
       "choice-of-life-3d-settings",
-      JSON.stringify({ sound, reduced, pace }),
+      JSON.stringify({ sound, reduced, pace, largeText, closeups }),
     );
   } catch {}
   world.reducedMotion = reduced;
+  world.closeups = closeups;
   world.speed = pace === "gentle" ? 2.35 : pace === "normal" ? 3 : 3.8;
   document.body.classList.toggle("reduced", reduced);
+  document.body.classList.toggle("large-text", largeText);
 }
 prefs();
 function save(updatePosition = true) {
@@ -178,7 +216,7 @@ function playUI() {
     done = ch.encounters.filter((_, i) => resolved(state, i)).length;
   return `<header class="game-header"><div class="chapter-heading"><span class="eyebrow">CHAPTER ${String(state.chapter + 1).padStart(2, "0")} / 12 · AGE ${ch.age}</span><h1>${esc(ch.title)}</h1><p>${esc(ch.place)}</p></div>${stats()}</header>
  <div class="chapter-progress" aria-label="Chapter progress">${chapters.map((c, i) => `<i class="${i < state.chapter ? "past" : i === state.chapter ? "current" : ""}" title="${c.title}"></i>`).join("")}</div>
- <aside class="objective"><span class="objective-dot"></span><div><strong>${done === 2 ? "A new chapter is waiting" : "A little time for people"}</strong><small>${
+ <aside class="objective"><span class="objective-dot"></span><div><strong>${done === 2 ? "Leave when your chapter feels complete" : esc(objectives[state.chapter])}</strong><small>${
    done === 2
      ? "Follow the golden doorway when you are ready."
      : `Meet ${esc(
@@ -186,18 +224,27 @@ function playUI() {
            .filter((_, i) => !resolved(state, i))
            .map((e) => e.person)
            .join(" & "),
-       )} · ${done}/2 moments`
- }</small><small class="discovery-progress">${state.discoveries.filter((id) => id.startsWith(`${state.chapter}:`)).length}/3 optional discoveries · Money measures security</small></div></aside>
+       )}`
+ }</small><small class="discovery-progress">${record(state).complete ? "✓ Keepsake earned" : "Optional: " + esc(activity(state).title)} · Money measures security</small></div></aside>
  <div id="toast" class="toast" role="status">${esc(notice)}</div>
  <div class="controls ${panel !== "none" ? "hidden" : ""}"><div class="dpad" aria-label="Movement controls"><button data-pad="0,-1" class="up" aria-label="Move up">↑</button><button data-pad="-1,0" class="left" aria-label="Move left">←</button><span class="pad-center">✦</span><button data-pad="1,0" class="right" aria-label="Move right">→</button><button data-pad="0,1" class="down" aria-label="Move down">↓</button></div><div class="move-help">WASD / arrows to move<br>or tap a place to walk there</div>${btn("interact", '<kbd>E</kbd> <span id="interact-label">Explore the room</span>', "interact", 'id="interact" disabled')}</div>
- <footer class="game-footer"><div>${btn("explore", "⌖ Explore")}${btn("journal", `▤ Memories <span class="count">${state.memories.length}</span>`)}</div><span id="save-status">${storageIssue ? "Saving unavailable · keep this tab open" : "● Saved on this device"}</span><div>${btn("sound", sound ? "♫" : "♪", "icon-button", `aria-label="${sound ? "Mute sound" : "Enable sound"}"`)}${btn("pause", "Ⅱ", "icon-button", 'aria-label="Pause game"')}</div></footer>
+ <footer class="game-footer"><div>${btn("explore", "⌖ Explore")}${btn("briefing", "▧ Story")}${btn("journal", `▤ Keepsakes <span class="count">${state.memories.length}</span>`)}</div><span id="save-status">${storageIssue ? "Saving unavailable · keep this tab open" : "● Saved on this device"}</span><div>${btn("sound", sound ? "♫" : "♪", "icon-button", `aria-label="${sound ? "Mute sound" : "Enable sound"}"`)}${btn("pause", "Ⅱ", "icon-button", 'aria-label="Pause game"')}</div></footer>
  ${loading ? '<div class="loading-cover" role="status"><span class="loader"></span>Turning the page…</div>' : ""}${loadError ? `<div class="loading-cover"><p>${esc(loadError)}</p>${btn("retry", "Try again", "primary")}</div>` : ""}`;
 }
 function panelUI() {
   if (panel === "none") return "";
+  if (panel === "activity") return activityPanel(state);
+  if (panel === "briefing") return briefingPanel(state);
+  if (panel === "response")
+    return responsePanel(
+      response.title,
+      response.text,
+      response.effect,
+      response.note,
+    );
   if (panel === "choice") {
-    const enc = chapters[state.chapter].encounters[activeEncounter];
-    return `<section class="dialogue" role="dialog" aria-modal="true" aria-labelledby="dialogue-title"><div class="dialogue-header"><span class="speaker-mark">${esc(enc.person.slice(0, 1))}</span><div><p class="eyebrow">${esc(enc.role)}</p><h2 id="dialogue-title" tabindex="-1">${esc(enc.person)}</h2></div>${btn("close", "×", "close", 'aria-label="Return to exploring"')}</div>${enc.context ? `<p class="context">${esc(enc.context(state.facts))}</p>` : ""}<p class="prompt">${esc(enc.prompt)}</p><div class="choices">${enc.options.map((o, i) => `<button class="choice" data-action="choose" data-index="${i}"><span class="option-index">${i + 1}</span><span><strong>${esc(o.label)}</strong><small>${esc(o.hint)}</small><span class="deltas">${delta(o.effect)}</span></span><span class="option-arrow">↗</span></button>`).join("")}</div><p class="untimed">Take your time. The world will wait.</p></section>`;
+    const enc = conversation(state, activeEncounter);
+    return `<section class="dialogue" role="dialog" aria-modal="true" aria-labelledby="dialogue-title"><div class="dialogue-header"><span class="speaker-mark">${esc(enc.person.slice(0, 1))}</span><div><p class="eyebrow">${esc(enc.role)}</p><h2 id="dialogue-title" tabindex="-1">${esc(enc.person)}</h2></div>${btn("close", "×", "close", 'aria-label="Return to exploring"')}</div>${enc.context ? `<p class="context">${esc(enc.context(state.facts))}</p>` : ""}<p class="prompt">${esc(enc.prompt)}</p><div class="choices">${enc.options.map((o, i) => `<button class="choice" data-action="choose" data-index="${i}" ${canChoose(state, activeEncounter, i) ? "" : "disabled"}><span class="option-index">${i + 1}</span><span><strong>${esc(o.label)}</strong><small>${esc(o.hint)}</small><span class="deltas">${delta(o.effect)}</span></span><span class="option-arrow">↗</span></button>`).join("")}</div><p class="untimed">Take your time. The world will wait.</p></section>`;
   }
   let heading = "",
     content = "";
@@ -207,12 +254,12 @@ function panelUI() {
       .places()
       .map(
         (p) =>
-          `<button data-action="travel" data-place="${p.id}"><span>${p.kind === "person" ? "☏" : p.kind === "exit" ? "↗" : "✦"}</span><span><strong>${esc(p.label)}</strong><small>${p.kind === "person" ? "A story moment" : p.kind === "exit" ? "Continue your life" : "An optional discovery"}</small></span><b>→</b></button>`,
+          `<button data-action="travel" data-place="${p.id}"><span>${["person", "guest", "companion"].includes(p.kind) ? "☏" : p.kind === "exit" ? "↗" : "✦"}</span><span><strong>${esc(p.label)}</strong><small>${p.kind === "person" ? "A story moment" : p.kind === "guest" ? "Meet this person directly" : p.kind === "companion" ? "A familiar face" : p.kind === "activity" ? "Hands-on activity · optional" : p.kind === "exit" ? "Continue your life" : "An optional discovery"}</small></span><b>→</b></button>`,
       )
       .join("")}</div>`;
   } else if (panel === "journal") {
-    heading = "Your little book of memories";
-    content = `<p>Every small choice leaves something behind.</p><div class="memories">${
+    heading = "Inside the blue tin";
+    content = `<p>Objects from the things you actually did. Your shelf grows with each chapter.</p>${keepsakeCards(state)}<h3>Your written memories</h3><div class="memories">${
       [...state.memories]
         .reverse()
         .map(
@@ -226,7 +273,7 @@ function panelUI() {
     content = `<p>Your current 3D life will be replaced when you begin. You can read your memories before starting again.</p><div class="menu-actions">${btn("new-confirm", "Begin a new life", "primary")}${btn("cancel-restart", "Keep my current life", "secondary")}</div>`;
   } else {
     heading = "A moment to breathe";
-    content = `<p>${storageIssue ? "Saving is unavailable. Keep this tab open to keep playing your current story." : "Your story is saved. Come back when you are ready."}</p><div class="menu-actions">${btn("close", "Return to your story", "primary")}${btn("motion", reduced ? "Reduced motion: on" : "Reduced motion: off", "secondary")}${btn("sound", sound ? "Sound: on" : "Sound: off", "secondary")}${btn("title", "Save & return to title", "quiet")}</div><p class="help-copy">Move: WASD or arrows · Interact: E or Space · Pause: Esc<br>Touch: use the pad or tap a destination.<br>Explore offers an automatic walk to each story moment.</p>`;
+    content = `<p>${storageIssue ? "Saving is unavailable. Keep this tab open to keep playing your current story." : "Your story is saved. Come back when you are ready."}</p><div class="menu-actions">${btn("close", "Return to your story", "primary")}${btn("text-size", largeText ? "Text: large" : "Text: comfortable", "secondary")}${btn("closeups", closeups ? "Conversation close-ups: on" : "Conversation close-ups: off", "secondary")}${btn("motion", reduced ? "Reduced motion: on" : "Reduced motion: off", "secondary")}${btn("sound", sound ? "Sound: on" : "Sound: off", "secondary")}${btn("title", "Save & return to title", "quiet")}</div><p class="help-copy">Move: WASD or arrows · Interact: E or Space · Pause: Esc<br>Touch: use the pad or tap a destination.<br>Explore offers an automatic walk to each story moment.</p>`;
   }
   return `<div class="modal-shade"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><header><h2 id="modal-title" tabindex="-1">${heading}</h2>${btn("close", "×", "close", 'aria-label="Close panel"')}</header>${content}</section></div>`;
 }
@@ -243,7 +290,7 @@ function endingUI() {
     .map((p) => `<p>${esc(p)}</p>`)
     .join(
       "",
-    )}</div><p class="ending-note">There is no perfect score for a life. There are only the things that mattered to you.</p><div class="ending-actions">${btn("journal", "Read your memory book", "secondary")}${btn("start", "Begin another story ↗", "primary")}${btn("title", "Return to title")}</div></main>`;
+    )}</div><h2 class="tin-heading">The things you made time for</h2>${keepsakeCards(state)}<details class="ending-chapters"><summary>Open your twelve-chapter story</summary>${chapterTimeline(state)}</details><p class="ending-note">There is no perfect score for a life. There are only the things that mattered to you.</p><div class="ending-actions">${btn("journal", "Read your memory book", "secondary")}${btn("start", "Begin another story ↗", "primary")}${btn("title", "Return to title")}</div></main>`;
 }
 function render(focus = false) {
   const focusedAction = (document.activeElement as HTMLElement | null)?.dataset
@@ -263,6 +310,9 @@ function render(focus = false) {
     !loadError &&
     !document.hidden;
   world.clearInput();
+  world.focus(
+    ["choice", "response", "activity"].includes(panel) ? focusedPlace : null,
+  );
   padPointer = null;
   layoutObserver.disconnect();
   for (const element of ui.querySelectorAll(".game-header,.dialogue"))
@@ -337,6 +387,8 @@ async function showChapter() {
     await world.show(state);
     loading = false;
     mode = state.complete ? "ending" : "play";
+    if (state.complete) panel = "none";
+    else if (panel === "none") panel = "briefing";
     render(true);
     save();
     toast(chapters[state.chapter].intro);
@@ -360,12 +412,40 @@ function interact(id: string) {
   if (mode !== "play" || panel !== "none" || loading || busy) return;
   const [kind, index] = id.split(":");
   const i = Number(index);
+  focusedPlace = id;
   if (kind === "person") {
     if (resolved(state, i)) return;
     activeEncounter = i;
     panel = "choice";
     cue();
     render(true);
+  } else if (kind === "activity") {
+    if (record(state).complete) return;
+    panel = "activity";
+    render(true);
+  } else if (kind === "guest" || kind === "companion") {
+    if (kind === "guest") {
+      state = meet(state, i);
+      world.update(state);
+      save();
+    }
+    response = {
+      title: kind === "guest" ? guestNames[i] : state.facts.partner,
+      text:
+        kind === "guest"
+          ? guestLines[i]
+          : `${state.facts.partner} has kept a place for you. ${state.chapter === 8 ? "“Tell me which part of this week you need help with. We can make a plan together.”" : state.chapter >= 10 ? "“There is still time for another ordinary afternoon together.”" : "“I would like to hear about your day—not just the work you finished.”"}`,
+      effect: {},
+      note:
+        kind === "guest"
+          ? "You can return to Jamie after meeting someone. Friendship does not require a romantic commitment."
+          : record(state, 7).complete
+            ? "The picnic cloth from your first gathering is still folded by the door."
+            : "Your chosen relationship continues beyond the neighbourhood gathering.",
+    };
+    panel = "response";
+    render(true);
+    world.acknowledge();
   } else if (kind === "discovery") {
     const next = discover(state, i);
     if (next === state) return;
@@ -442,12 +522,23 @@ ui.addEventListener("click", async (event) => {
     prefs();
     render();
   }
+  if (action === "text-size" || action === "closeups") {
+    if (action === "text-size") largeText = !largeText;
+    else closeups = !closeups;
+    prefs();
+    render();
+  }
   if (action === "interact") world.interact();
   if (action === "close") {
     panel = "none";
     render();
   }
-  if (action === "pause" || action === "journal" || action === "explore") {
+  if (
+    action === "pause" ||
+    action === "journal" ||
+    action === "explore" ||
+    action === "briefing"
+  ) {
     panel = action;
     save();
     render(true);
@@ -466,13 +557,51 @@ ui.addEventListener("click", async (event) => {
         state = next;
         world.update(state);
         save();
-        panel = "none";
+        const memory = state.memories.at(-1)!;
+        response = {
+          title: conversation(state, activeEncounter).person,
+          text: memory.text,
+          effect: memory.effect,
+          note: record(state).complete
+            ? "Your keepsake is saved in the blue tin."
+            : `There is still time for: ${activity(state).title}.`,
+        };
+        panel = "response";
         cue("choice");
         render();
-        toast(state.memories[state.memories.length - 1].text);
+        world.acknowledge();
       }
     } finally {
       busy = false;
+    }
+  }
+  if (
+    ["task-step", "task-undo", "task-assist"].includes(action ?? "") &&
+    panel === "activity"
+  ) {
+    const next =
+      action === "task-undo"
+        ? undoActivity(state)
+        : action === "task-assist"
+          ? assistActivity(state)
+          : perform(state, target.dataset.step!);
+    if (next !== state) {
+      state = next;
+      world.update(state);
+      save();
+      cue();
+      if (record(state).complete) {
+        const memory = state.memories.at(-1)!;
+        response = {
+          title: memory.title,
+          text: memory.text,
+          effect: memory.effect,
+          note: "A new keepsake has been added to your tin. Future chapters will remember this moment.",
+        };
+        panel = "response";
+      }
+      render(true);
+      world.acknowledge();
     }
   }
   if (action === "travel") {
@@ -538,7 +667,7 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Tab" && panel !== "none") {
     const items = [
       ...ui.querySelectorAll<HTMLElement>(
-        '[role="dialog"] button,[role="dialog"] input,[role="dialog"] select',
+        '[role="dialog"] button:not(:disabled),[role="dialog"] input:not(:disabled),[role="dialog"] select:not(:disabled)',
       ),
     ];
     const first = items[0],
@@ -630,6 +759,10 @@ Object.defineProperty(window, "lifeDiagnostics", {
     complete: state.complete,
     choices: Object.keys(state.choices).length,
     discoveries: state.discoveries.length,
+    activities: Object.values(state.activities).filter((r) => r.complete)
+      .length,
+    activitySteps: record(state).actions.length,
+    meetings: [...state.meetings],
     render: world.diagnostics(),
   }),
 });

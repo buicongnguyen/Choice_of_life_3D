@@ -1,4 +1,17 @@
 import { chapters, careerFor, type Scores, type Facts } from "./content";
+import {
+  activity,
+  allowedActions,
+  canChoose,
+  conversation,
+  guestNames,
+  record,
+  responseFor,
+  taskComplete,
+  taskResult,
+  boatEnding,
+  type ActivityRecord,
+} from "./journey";
 export const SAVE_KEY = "choice-of-life-3d-v1";
 export type Identity = {
   gender: "male" | "female";
@@ -24,6 +37,8 @@ export type Life = {
   identity: Identity;
   position: { x: number; z: number };
   complete: boolean;
+  activities: Record<string, ActivityRecord>;
+  meetings: string[];
 };
 export const scoreKeys = ["health", "happiness", "money"] as const;
 export function newLife(identity: Identity): Life {
@@ -39,6 +54,8 @@ export function newLife(identity: Identity): Life {
     identity,
     position: { x: 0, z: 2.6 },
     complete: false,
+    activities: {},
+    meetings: [],
   };
 }
 export const choiceId = (chapter: number, encounter: number) =>
@@ -64,8 +81,12 @@ export function choose(state: Life, encounter: number, option: number): Life {
     resolved(state, encounter)
   )
     return state;
-  const pick = chapters[state.chapter]?.encounters[encounter]?.options[option];
-  if (!pick) return state;
+  if (
+    !chapters[state.chapter]?.encounters[encounter]?.options[option] ||
+    !canChoose(state, encounter, option)
+  )
+    return state;
+  const pick = conversation(state, encounter).options[option];
   const s = structuredClone(state),
     id = choiceId(s.chapter, encounter);
   s.choices[id] = option;
@@ -75,7 +96,7 @@ export function choose(state: Life, encounter: number, option: number): Life {
     id,
     chapter: s.chapter,
     title: pick.label,
-    text: pick.memory,
+    text: `${pick.memory} ${responseFor(s, encounter)}`,
     effect,
   });
   return s;
@@ -93,7 +114,7 @@ export function discover(state: Life, index: number): Life {
   const s = structuredClone(state);
   s.discoveries.push(id);
   const key = scoreKeys[index];
-  const effect = apply(s, { [key]: 4 });
+  const effect = apply(s, { [key]: 1 });
   s.memories.push({
     id: `found:${id}`,
     chapter: s.chapter,
@@ -101,6 +122,78 @@ export function discover(state: Life, index: number): Life {
     text: `${chapters[s.chapter].discoveries[index]}: a small moment for ${index === 0 ? "your wellbeing" : index === 1 ? "a little joy" : "tomorrow's security"}.`,
     effect,
   });
+  return s;
+}
+export function meet(state: Life, index: number): Life {
+  const name = guestNames[index];
+  if (
+    state.complete ||
+    state.chapter !== 7 ||
+    !name ||
+    state.meetings.includes(name)
+  )
+    return state;
+  const s = structuredClone(state);
+  s.meetings.push(name);
+  return s;
+}
+export function perform(state: Life, action: string): Life {
+  if (!allowedActions(state).some((a) => a.id === action)) return state;
+  const s = structuredClone(state),
+    previous = record(s);
+  const actions = [...previous.actions, action];
+  const complete = taskComplete(s, actions);
+  s.activities[String(s.chapter)] = { actions, complete };
+  if (complete) {
+    const result = taskResult(s);
+    s.memories.push({
+      id: `activity:${s.chapter}`,
+      chapter: s.chapter,
+      title: activity(s).keepsake,
+      text: result.text,
+      effect: apply(s, result.effect),
+    });
+  }
+  return s;
+}
+export function undoActivity(state: Life): Life {
+  const r = record(state);
+  if (
+    state.complete ||
+    r.complete ||
+    activity(state).kind !== "planner" ||
+    !r.actions.length
+  )
+    return state;
+  const s = structuredClone(state);
+  s.activities[String(s.chapter)].actions.pop();
+  return s;
+}
+export function assistActivity(state: Life): Life {
+  let s = state;
+  // Bounded authored tasks; assistance uses exactly the same transition rules.
+  for (let i = 0; i < 8 && !record(s).complete; i++) {
+    const options = allowedActions(s);
+    if (!options.length) break;
+    const plan =
+      s.chapter === 4
+        ? ["study", "rest", "friends"]
+        : s.chapter === 6
+          ? ["service", "quality", "rest"]
+          : ["visit", "support", "rest"];
+    const preferred =
+      activity(s).kind === "planner"
+        ? plan[record(s).actions.length]
+        : s.chapter === 1
+          ? record(s).actions.includes("basket")
+            ? "repair"
+            : "basket"
+          : "";
+    s = perform(
+      s,
+      options.find((a) => a.id === preferred)?.id ?? options[0].id,
+    );
+  }
   return s;
 }
 export function hazard(state: Life): Life {
@@ -134,18 +227,28 @@ export function biography(s: Life): string[] {
       : f.home === "community"
         ? "Your community became a home bigger than any building."
         : "Your independent life was full of friends and chosen family.",
-    `Rowan remembered you across the years. ${f.reunion === "share" ? "The toy boat found another childhood." : "The old toy boat still had a story to tell."}`,
+    `Rowan remembered you across the years. ${boatEnding(s)} ${f.reunion === "share" ? "You passed it on to another childhood." : "You kept a place for an old friendship."}`,
     f.gift === "knowledge"
       ? "You left knowledge and encouragement for the next person."
       : f.gift === "opportunity"
         ? "You gave someone else room to begin."
         : "You left the world with a little more room for belonging.",
+    `The ${f.project ?? "first"} school project and ${f.club ?? "school"} club gave your ${f.hobby ?? "childhood"} interests somewhere to grow. You learned to protect ${f.rhythm === "rest" ? "rest" : f.rhythm === "friends" ? "friendship" : "time to practise"}.`,
+    `When Mum needed help, you ${f.care === "present" ? "made time to be there" : f.care === "support" ? "arranged skilled support" : "built a network of support"}. At work you ${f.midlife === "promotion" ? "accepted a promotion" : f.midlife === "time" ? "chose a lighter schedule" : "asked for flexibility"}. These choices shaped the busy middle of your life.`,
+    `Your experience became ${f.legacy === "mentor" ? "time spent mentoring" : f.legacy === "builder" ? "a guide for others" : "connections between people"}. Retirement made room for ${f.retirement === "garden" ? "a garden" : f.retirement === "travel" ? "a long-imagined journey" : "a quiet creative routine"}.`,
+    `Looking back, you chose to hold close ${f.meaning === "people" ? "the people who made room for you" : f.meaning === "work" ? "the things you helped make possible" : "the ordinary days"}. ${Object.values(s.activities).filter((r) => r.complete).length} hands-on moments found a place in your tin.`,
   ];
 }
 export function parseLife(raw: string | null): Life | null {
   if (!raw || raw.length > 100000) return null;
   try {
     const s = JSON.parse(raw) as Life;
+    // Additive migration preserves every existing score, choice and memory.
+    if (s.activities === undefined) s.activities = {};
+    if (s.meetings === undefined)
+      s.meetings = guestNames.includes(s.facts?.partner)
+        ? [s.facts.partner]
+        : [];
     if (
       s.version !== 1 ||
       !Number.isInteger(s.chapter) ||
@@ -213,6 +316,49 @@ export function parseLife(raw: string | null): Life | null {
     )
       return null;
     if (
+      !Array.isArray(s.meetings) ||
+      new Set(s.meetings).size !== s.meetings.length ||
+      s.meetings.some((name) => !guestNames.includes(name)) ||
+      (s.chapter < 7 && s.meetings.length)
+    )
+      return null;
+    if (
+      !s.activities ||
+      typeof s.activities !== "object" ||
+      Array.isArray(s.activities) ||
+      Object.keys(s.activities).length > 12
+    )
+      return null;
+    for (const [key, progress] of Object.entries(s.activities)) {
+      if (
+        !/^(0|[1-9]\d*)$/.test(key) ||
+        Number(key) > s.chapter ||
+        !progress ||
+        !Array.isArray(progress.actions) ||
+        progress.actions.length > 6 ||
+        typeof progress.complete !== "boolean"
+      )
+        return null;
+      const replay = {
+        ...s,
+        chapter: Number(key),
+        complete: false,
+        activities: {
+          ...s.activities,
+          [key]: { actions: [] as string[], complete: false },
+        },
+      };
+      for (const action of progress.actions) {
+        if (!allowedActions(replay).some((a) => a.id === action)) return null;
+        replay.activities[key].actions.push(action);
+        replay.activities[key].complete = taskComplete(
+          replay,
+          replay.activities[key].actions,
+        );
+      }
+      if (replay.activities[key].complete !== progress.complete) return null;
+    }
+    if (
       !Array.isArray(s.discoveries) ||
       s.discoveries.length > 36 ||
       new Set(s.discoveries).size !== s.discoveries.length ||
@@ -236,7 +382,9 @@ export function parseLife(raw: string | null): Life | null {
     if (
       !Array.isArray(s.memories) ||
       s.memories.length !==
-        Object.keys(s.choices).length + s.discoveries.length ||
+        Object.keys(s.choices).length +
+          s.discoveries.length +
+          Object.values(s.activities).filter((r) => r.complete).length ||
       s.memories.some(
         (m) =>
           !m ||
@@ -255,6 +403,24 @@ export function parseLife(raw: string | null): Life | null {
     for (const memory of s.memories) {
       if (memoryIds.has(memory.id)) return null;
       memoryIds.add(memory.id);
+      if (memory.id.startsWith("activity:")) {
+        const key = memory.id.slice(9);
+        if (key !== String(memory.chapter) || !s.activities[key]?.complete)
+          return null;
+        const nominal = taskResult({ ...s, chapter: memory.chapter }).effect;
+        if (
+          !memory.effect ||
+          scoreKeys.some(
+            (k) =>
+              !Number.isFinite(memory.effect[k]) ||
+              Math.abs(memory.effect[k]) > Math.abs(nominal[k] ?? 0) ||
+              (memory.effect[k] !== 0 &&
+                Math.sign(memory.effect[k]) !== Math.sign(nominal[k] ?? 0)),
+          )
+        )
+          return null;
+        continue;
+      }
       const discovery = memory.id.startsWith("found:");
       const id = discovery ? memory.id.slice(6) : memory.id;
       if (

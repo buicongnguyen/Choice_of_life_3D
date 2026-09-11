@@ -1,0 +1,296 @@
+{
+  "base": "http://127.0.0.1:4196/",
+  "checkedAt": "2026-09-11T05:54:02.082Z",
+  "result": "pass",
+  "checks": [
+    {
+      "label": "boat search / saved clue",
+      "overflow": false,
+      "overlap": false,
+      "sceneHeight": 255.75,
+      "diagnostics": {
+        "mode": "play",
+        "panel": "activity",
+        "loading": false,
+        "chapter": 1,
+        "complete": false,
+        "choices": 2,
+        "discoveries": 0,
+        "activities": 0,
+        "activitySteps": 2,
+        "meetings": [],
+        "render": {
+          "drawCalls": 267,
+          "triangles": 314622,
+          "position": {
+            "x": 0,
+            "z": 2.521666666666667
+          },
+          "models": [
+            "male",
+            "female",
+            "baby",
+            "cat",
+            "home",
+            "blanket",
+            "rattle",
+            "coins",
+            "tin",
+            "boat",
+            "book",
+            "plant",
+            "apple",
+            "school"
+          ],
+          "playerVisible": true,
+          "scale": 0.62,
+          "walking": false,
+          "routePoints": 0
+        }
+      }
+    },
+    {
+      "label": "phone exam planner",
+      "overflow": false,
+      "overlap": false,
+      "sceneHeight": 223.296875,
+      "diagnostics": {
+        "mode": "play",
+        "panel": "activity",
+        "loading": false,
+        "chapter": 4,
+        "complete": false,
+        "choices": 8,
+        "discoveries": 0,
+        "activities": 0,
+        "activitySteps": 3,
+        "meetings": [],
+        "render": {
+          "drawCalls": 264,
+          "triangles": 313920,
+          "position": {
+            "x": 0,
+            "z": 2.5608333333333335
+          },
+          "models": [
+            "male",
+            "female",
+            "baby",
+            "cat",
+            "home",
+            "blanket",
+            "rattle",
+            "coins",
+            "tin",
+            "boat",
+            "book",
+            "plant",
+            "school",
+            "apple",
+            "letter",
+            "campus"
+          ],
+          "playerVisible": true,
+          "scale": 0.92,
+          "walking": false,
+          "routePoints": 0
+        }
+      }
+    },
+    {
+      "label": "phone scholarship conversation",
+      "overflow": false,
+      "overlap": false,
+      "sceneHeight": 257.0625,
+      "diagnostics": {
+        "mode": "play",
+        "panel": "choice",
+        "loading": false,
+        "chapter": 5,
+        "complete": false,
+        "choices": 10,
+        "discoveries": 0,
+        "activities": 1,
+        "activitySteps": 0,
+        "meetings": [],
+        "render": {
+          "drawCalls": 278,
+          "triangles": 324280,
+          "position": {
+            "x": -1.5208030379841697,
+            "z": 0.3187954430237432
+          },
+          "models": [
+            "male",
+            "female",
+            "baby",
+            "cat",
+            "home",
+            "blanket",
+            "rattle",
+            "coins",
+            "tin",
+            "boat",
+            "book",
+            "plant",
+            "school",
+            "apple",
+            "letter",
+            "campus",
+            "office"
+          ],
+          "playerVisible": true,
+          "scale": 1,
+          "walking": false,
+          "routePoints": 0
+        }
+      }
+    },
+    {
+      "label": "clinic workday",
+      "overflow": false,
+      "overlap": false,
+      "sceneHeight": 232,
+      "diagnostics": {
+        "mode": "play",
+        "panel": "activity",
+        "loading": false,
+        "chapter": 6,
+        "complete": false,
+        "choices": 12,
+        "discoveries": 0,
+        "activities": 0,
+        "activitySteps": 3,
+        "meetings": [],
+        "render": {
+          "drawCalls": 267,
+          "triangles": 324548,
+          "position": {
+            "x": 0,
+            "z": 2.5608333333333335
+          },
+          "models": [
+            "male",
+            "female",
+            "baby",
+            "cat",
+            "home",
+            "blanket",
+            "rattle",
+            "coins",
+            "tin",
+            "boat",
+            "book",
+            "plant",
+            "office",
+            "apple",
+            "letter",
+            "town"
+          ],
+          "playerVisible": true,
+          "scale": 1,
+          "walking": false,
+          "routePoints": 0
+        }
+      }
+    },
+    {
+      "label": "partner continuity",
+      "overflow": false,
+      "overlap": false,
+      "sceneHeight": 361.71875,
+      "diagnostics": {
+        "mode": "play",
+        "panel": "response",
+        "loading": false,
+        "chapter": 8,
+        "complete": false,
+        "choices": 16,
+        "discoveries": 0,
+        "activities": 0,
+        "activitySteps": 0,
+        "meetings": [
+          "Avery",
+          "Quinn",
+          "Morgan"
+        ],
+        "render": {
+          "drawCalls": 311,
+          "triangles": 329648,
+          "position": {
+            "x": 2.075833333333331,
+            "z": 2.6
+          },
+          "models": [
+            "male",
+            "female",
+            "baby",
+            "cat",
+            "home",
+            "blanket",
+            "rattle",
+            "coins",
+            "tin",
+            "boat",
+            "book",
+            "plant",
+            "town",
+            "letter",
+            "office"
+          ],
+          "playerVisible": true,
+          "scale": 1.02,
+          "walking": false,
+          "routePoints": 0
+        }
+      }
+    },
+    {
+      "label": "twelve-chapter ending",
+      "diagnostics": {
+        "mode": "ending",
+        "panel": "none",
+        "loading": false,
+        "chapter": 11,
+        "complete": true,
+        "choices": 24,
+        "discoveries": 0,
+        "activities": 12,
+        "activitySteps": 3,
+        "meetings": [
+          "Avery",
+          "Quinn",
+          "Morgan"
+        ],
+        "render": {
+          "drawCalls": 353,
+          "triangles": 439080,
+          "position": {
+            "x": 0,
+            "z": 2.6
+          },
+          "models": [
+            "male",
+            "female",
+            "baby",
+            "cat",
+            "home",
+            "blanket",
+            "rattle",
+            "coins",
+            "tin",
+            "boat",
+            "book",
+            "plant",
+            "garden"
+          ],
+          "playerVisible": true,
+          "scale": 0.95,
+          "walking": false,
+          "routePoints": 0
+        }
+      }
+    }
+  ],
+  "errors": []
+}

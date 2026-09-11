@@ -2,7 +2,7 @@ import { chromium } from "@playwright/test";
 import { tsImport } from "tsx/esm/api";
 import { mkdir, writeFile } from "node:fs/promises";
 import assert from "node:assert/strict";
-const { newLife, choose, advance, SAVE_KEY } = await tsImport(
+const { newLife, choose, advance, meet, SAVE_KEY } = await tsImport(
   "../src/core.ts",
   import.meta.url,
 );
@@ -29,16 +29,23 @@ async function open(options = {}, fixture) {
   await ready(page);
   await page.locator(`[data-action=${fixture ? "continue" : "start"}]`).click();
   await ready(page);
+  await page.locator('[role="dialog"] [data-action="close"]').last().click();
   return page;
 }
 async function travel(page, id) {
+  if (
+    ["briefing", "response", "pause"].includes((await diagnostic(page)).panel)
+  )
+    await page.locator('[role="dialog"] [data-action="close"]').last().click();
   await page.locator("[data-action=explore]").click();
   await page.locator(`[data-place="${id}"]`).click();
 }
 function fixture(chapter) {
   let state = newLife({ name: "Review", gender: "female", skin: 2 });
-  while (state.chapter < chapter)
+  while (state.chapter < chapter) {
+    if (state.chapter === 7) for (let i = 0; i < 3; i++) state = meet(state, i);
     state = advance(choose(choose(state, 1, 0), 0, 0));
+  }
   return state;
 }
 try {

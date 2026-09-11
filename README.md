@@ -8,6 +8,8 @@ Little moments. A whole life. A self-paced 3D life adventure built with **Blende
 - [Detailed redesign and implementation plan](IMPLEMENTATION_PLAN.md)
 - [Refined game design: UI, map, movement, activities and all twelve stages](GAME_DESIGN.md)
 - [0.1.1 code and logic review](docs/REVIEW_2026-09-11.md)
+- [Playable-story implementation plan, 0.3.0](docs/STORY_EXPERIENCE_PLAN_0.3.0.md)
+- [Story release review, 0.3.0](docs/STORY_REVIEW_0.3.0.md)
 - [Implementation and review record](docs/IMPLEMENTATION_STATUS.md)
 
 Explore twelve chapters from a family nursery to a legacy garden. Meet recurring people, discover small treasures, choose an education and career, decide what home means to you, and open a book of memories at the end. Health, Happiness, and Money remain separate outcomes.
@@ -16,7 +18,7 @@ Explore twelve chapters from a family nursery to a legacy garden. Meet recurring
 
 WASD or arrows move in both directions on the actual 3D ground. Click/tap a destination to walk there, or use the four-way touch pad. E/Space interacts with the nearest point of interest. Clicking a person walks over and opens their conversation. **Explore** offers a list of destinations and automatic walking. **Esc** pauses. Reading a choice always pauses movement.
 
-Play starts immediately. The title's **Make it yours** section offers a name, male/female character, four skin tones, and gentle/normal/brisk walking pace. Appearance changes no story probabilities. Sound and reduced motion are optional. Continue resumes the saved 3D life on the same device and browser.
+Each chapter starts with a persistent briefing. **Story** reopens it. Teal activity labels lead to an untimed search, sequence or planning board; all twelve are optional and offer assistance. Ordinary discoveries give a small +1 reward. The title's **Make it yours** section offers a name, male/female character, four skin tones, and gentle/normal/brisk walking pace. Appearance changes no story opportunities. Sound and reduced motion are optional; Pause also offers large text and conversation framing. Continue resumes the saved 3D life on the same device and browser, including unfinished activities.
 
 ## Development
 
@@ -30,7 +32,7 @@ npm run build
 npm run preview
 ```
 
-For the shorter movement, save-race and responsive UI regression review, run `node scripts/refinement-smoke.mjs` against a production preview on port 4194 (or set `GAME_URL`). The nine pure test groups include safe navigation and save compatibility; they finish in under a second on the development machine.
+`npm test` runs focused core, activity, compatibility and navigation tests. `npm run smoke` reviews the three flagship activities, direct partner introductions/continuity, the ending, and mobile panels against port 4196 (or `GAME_URL`). The separate movement/save-race review remains available as `node scripts/refinement-smoke.mjs` against port 4194.
 
 The checked-in GLBs make Blender optional for running or deploying the game. To rebuild the art, install Blender 4.5 LTS and run:
 
@@ -42,14 +44,14 @@ Editable `.blend` files live in `art/`. Runtime models, collider metadata, and a
 
 Version 0.2.0 rebuilds all twenty assets with construction details, differentiated materials, woven/wood/stone surface maps, improved character features, and calibrated reflection lighting. The model viewer uses the same GLBs and lighting as the game; drag to inspect or pinch to zoom. `node scripts/art-smoke.mjs` checks embedded materials, animation pivots, all model loads, mobile layout and a short playable save/continue flow. Art URLs include the package version to invalidate older browser-cached GLBs after updates.
 
-For one bounded full-life browser check, start the production preview and run:
+For the bounded story browser check, start the production preview and run:
 
 ```powershell
 $env:GAME_URL = 'http://127.0.0.1:4173/'
 npm run smoke
 ```
 
-The smoke script walks to every encounter through the real UI and pathfinder, makes 24 choices, reaches the ending, checks save/reload, and checks mobile dialogue layout. It does not run a large seed matrix. Screenshots are local review artifacts in `docs/captures/`.
+The story smoke uses valid isolated chapter fixtures and real UI/pathfinding for the reviewed interactions. It checks partial activity save/reload, planner undo, supported tuition, the clinic workday, partner introductions, later partner presence and a twelve-chapter ending. `node scripts/smoke.mjs` retains the longer all-encounter route. Neither runs a seed matrix. Screenshots are local review artifacts in `docs/captures/`.
 
 ## Publishing
 
@@ -57,8 +59,10 @@ SSH origin: `git@github.com:buicongnguyen/Choice_of_life_3D.git`.
 
 Pushes to `main` run focused core tests and the production build, then deploy the resulting `dist` artifact through GitHub Pages. `/release.json` contains the exact commit SHA. Relative asset URLs support the GitHub project subpath. To roll back, revert the affected source commit and push the revert normally; do not rewrite the branch history.
 
-## First-release scope
+## Current scope
 
-This is a compact complete 3D edition, version 0.2.0. It contains six scene families, twenty GLB assets, 24 authored encounters, 72 options, 36 optional discoveries, three partner candidates, and a personalized ending. Story consequences use named facts and recurring dialogue. Characters use articulated mesh pivots with distance-driven walking and a seated baby scoot, rather than full armature animation clips.
+Version 0.3.0 adds twelve optional activity boards to the six scene families and twenty GLBs from 0.2.0. There are 24 main encounters, 72 choices, 24 ordinary discovery points, three directly approachable partner candidates, later partner check-ins, a keepsake shelf and illustrated journal, and a twelve-chapter personal chronicle. The old middle discovery in each room is now the activity anchor. Old discovery records remain valid.
 
-The original 2D repositories and their save keys are independent. This edition intentionally replaces scrolling lanes with self-paced exploration. Wider profession wardrobes, more expressive acting, longer partner stories, richer activities, mobile device performance tuning, and a dedicated nonvisual play mode are follow-up work. Balance is deliberately forgiving; some late-game outcomes can reach the score cap, and the UI shows the actual available change.
+Rowan's boat has search/repair/help/lending outcomes. A three-afternoon exam planner can unlock supported tuition; club and school-project history can improve field opportunities. The first workday has care, software and business variants. Care planning has explicit costs. Positive choice rewards are reduced, not retroactively applied to old saves. Characters use articulated mesh pivots with distance-driven walking, restrained acknowledgement and a seated baby scoot, rather than full armature animation clips.
+
+The original 2D repositories and their save keys are independent. This edition intentionally replaces scrolling lanes with self-paced exploration. Full physics minigames, wider profession wardrobes, facial rigs/voice acting, larger career environments, ambient NPC schedules, physical mobile performance tuning, and a dedicated nonvisual play mode remain follow-up work. Balance is forgiving and some outcomes can reach the cap; the UI shows actual choice changes. The activity planner shows its nominal preview until commitment, then reports the actual clamped result.

@@ -2,6 +2,8 @@
 
 Design revision: 11 September 2026. Target: the 0.1.1 refinement release.
 
+Story amendment, 0.3.0: [`docs/STORY_EXPERIENCE_PLAN_0.3.0.md`](docs/STORY_EXPERIENCE_PLAN_0.3.0.md) supersedes the activity/reward/UI rules below where they differ. It adds optional activity boards in all twelve chapters, two ordinary +1 discoveries per room, reduced positive conversation rewards, supported tuition and interest-based opportunities, direct guest introductions, partner continuity, persistent briefings/responses, a keepsake shelf/journal and chronological ending. Existing chapter gates, movement, collider footprints and canonical conversation IDs remain. Old saves migrate additively; no historical score or memory is rewritten. Legacy puddle records remain readable, but the repeated puddle is no longer spawned. Career locations use the existing room kit with a sign/props; these are not entirely new Blender environments. The older sections below retain the original map and system contracts.
+
 Art amendment, 0.2.0: [`art/ART_DIRECTION.md`](art/ART_DIRECTION.md) specifies the rebuilt, detailed Blender models, embedded surface textures, shared calibrated lighting and close-up asset viewer. The map, progression, scale and save contracts below remain unchanged. The previous flat-clay surface treatment is superseded by that art amendment.
 
 This is the implementation contract for this repository, not a promise of an AAA-sized production. `IMPLEMENTATION_PLAN.md` records the original conversion plan. This document refines it into concrete UI, map, movement, activity, story, and reliability rules. Sections 1–9 define this release; section 10 is explicitly future work.
