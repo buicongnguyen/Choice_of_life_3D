@@ -1,0 +1,154 @@
+{
+  "metrics": {
+    "assetBytes": 10908464,
+    "fullAssetBytes": 18446868,
+    "triangles": 365407,
+    "fullTriangles": 482531
+  },
+  "low": {
+    "mode": "play",
+    "panel": "none",
+    "loading": false,
+    "chapter": 0,
+    "complete": false,
+    "choices": 0,
+    "discoveries": 0,
+    "activities": 0,
+    "activitySteps": 0,
+    "meetings": [],
+    "render": {
+      "quality": "low",
+      "pixelRatio": 0.85,
+      "shadows": false,
+      "maxFPS": 30,
+      "buffer": {
+        "width": 351,
+        "height": 454
+      },
+      "drawCalls": 124,
+      "triangles": 83404,
+      "position": {
+        "x": 0,
+        "z": 2.6
+      },
+      "models": [
+        "male",
+        "female",
+        "baby",
+        "cat",
+        "home",
+        "blanket",
+        "rattle",
+        "coins",
+        "tin",
+        "boat",
+        "book",
+        "plant"
+      ],
+      "playerVisible": true,
+      "scale": 1,
+      "walking": false,
+      "routePoints": 0
+    },
+    "overflow": false
+  },
+  "high": {
+    "mode": "play",
+    "panel": "none",
+    "loading": false,
+    "chapter": 0,
+    "complete": false,
+    "choices": 0,
+    "discoveries": 0,
+    "activities": 0,
+    "activitySteps": 0,
+    "meetings": [],
+    "render": {
+      "quality": "high",
+      "pixelRatio": 1.5,
+      "shadows": true,
+      "maxFPS": 60,
+      "buffer": {
+        "width": 621,
+        "height": 802
+      },
+      "drawCalls": 232,
+      "triangles": 286570,
+      "position": {
+        "x": 0.8557608598302261,
+        "z": 2.1241421305749553
+      },
+      "models": [
+        "male",
+        "female",
+        "baby",
+        "cat",
+        "home",
+        "blanket",
+        "rattle",
+        "coins",
+        "tin",
+        "boat",
+        "book",
+        "plant"
+      ],
+      "playerVisible": true,
+      "scale": 1,
+      "walking": false,
+      "routePoints": 0
+    },
+    "overflow": false
+  },
+  "adultLow": {
+    "mode": "play",
+    "panel": "none",
+    "loading": false,
+    "chapter": 6,
+    "complete": false,
+    "choices": 12,
+    "discoveries": 0,
+    "activities": 0,
+    "activitySteps": 0,
+    "meetings": [],
+    "render": {
+      "quality": "low",
+      "pixelRatio": 0.85,
+      "shadows": false,
+      "maxFPS": 30,
+      "buffer": {
+        "width": 351,
+        "height": 454
+      },
+      "drawCalls": 149,
+      "triangles": 98250,
+      "position": {
+        "x": 0,
+        "z": 2.6
+      },
+      "models": [
+        "male",
+        "female",
+        "baby",
+        "cat",
+        "home",
+        "blanket",
+        "rattle",
+        "coins",
+        "tin",
+        "boat",
+        "book",
+        "plant",
+        "office",
+        "apple",
+        "letter"
+      ],
+      "playerVisible": true,
+      "scale": 1,
+      "walking": false,
+      "routePoints": 0
+    },
+    "overflow": false
+  },
+  "saveSafety": true,
+  "errors": []
+}

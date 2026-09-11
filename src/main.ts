@@ -1,6 +1,7 @@
 import "./style.css";
 import "./story.css";
 import { World, type Place } from "./world";
+import { graphicsQuality, type GraphicsQuality } from "./graphics";
 import { chapters, careerFor, type Scores } from "./content";
 import {
   activity,
@@ -92,6 +93,10 @@ let activeEncounter = 0,
   pace = "gentle";
 let sound = false,
   reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const phone =
+  matchMedia("(pointer: coarse)").matches &&
+  Math.min(screen.width, screen.height) <= 900;
+let graphics = graphicsQuality(undefined, phone);
 try {
   const prefs = JSON.parse(
     localStorage.getItem("choice-of-life-3d-settings") ?? "{}",
@@ -99,6 +104,19 @@ try {
   sound = prefs.sound === true;
   largeText = prefs.largeText === true;
   closeups = prefs.closeups !== false;
+  graphics = graphicsQuality(prefs.graphics, phone);
+  // Carry unstarted character setup through a graphics-only reload once.
+  const draft = prefs.setupDraft;
+  if (
+    draft &&
+    typeof draft.name === "string" &&
+    draft.name.length <= 24 &&
+    (draft.gender === "male" || draft.gender === "female") &&
+    Number.isInteger(draft.skin) &&
+    draft.skin >= 0 &&
+    draft.skin < 4
+  )
+    identity = { name: draft.name, gender: draft.gender, skin: draft.skin };
   reduced = typeof prefs.reduced === "boolean" ? prefs.reduced : reduced;
   pace = ["gentle", "normal", "brisk"].includes(prefs.pace)
     ? prefs.pace
@@ -111,7 +129,7 @@ let padPointer: number | null = null;
 let renderedPanel: Panel = "none";
 let returnAction: string | undefined;
 try {
-  world = new World(host);
+  world = new World(host, graphics);
 } catch {
   ui.innerHTML =
     '<main class="error-screen"><h1>Your browser could not open the 3D world.</h1><p>Try an up-to-date browser with hardware acceleration enabled.</p><button onclick="location.reload()">Try again</button></main>';
@@ -144,7 +162,7 @@ function prefs() {
   try {
     localStorage.setItem(
       "choice-of-life-3d-settings",
-      JSON.stringify({ sound, reduced, pace, largeText, closeups }),
+      JSON.stringify({ sound, reduced, pace, largeText, closeups, graphics }),
     );
   } catch {}
   world.reducedMotion = reduced;
@@ -152,6 +170,7 @@ function prefs() {
   world.speed = pace === "gentle" ? 2.35 : pace === "normal" ? 3 : 3.8;
   document.body.classList.toggle("reduced", reduced);
   document.body.classList.toggle("large-text", largeText);
+  document.body.dataset.graphics = graphics;
 }
 prefs();
 function save(updatePosition = true) {
@@ -201,12 +220,45 @@ function stats() {
 function btn(action: string, label: string, cls = "quiet", extra = "") {
   return `<button type="button" class="${cls}" data-action="${action}" ${extra}>${label}</button>`;
 }
+function graphicsControl() {
+  return `<label class="graphics-setting">Graphics detail<select name="graphics" aria-describedby="graphics-help"><option value="low" ${graphics === "low" ? "selected" : ""}>Low detail · faster on phones</option><option value="high" ${graphics === "high" ? "selected" : ""}>Full detail · richer visuals</option></select><small id="graphics-help">Low uses simpler objects and lower 3D resolution. Switching reloads the title; select Continue to return to your saved story.</small><small id="graphics-status" role="status"></small></label>`;
+}
+function changeGraphics(next: GraphicsQuality) {
+  if (next === graphics) return;
+  // A fresh context really releases the old GPU assets and applies antialias/power
+  // settings. Never reload a life that could not be saved on this device.
+  save();
+  try {
+    if (mode !== "title" && storageIssue) throw new Error("Save unavailable");
+    localStorage.setItem(
+      "choice-of-life-3d-settings",
+      JSON.stringify({
+        sound,
+        reduced,
+        pace,
+        largeText,
+        closeups,
+        graphics: next,
+        setupDraft: mode === "title" ? identity : undefined,
+      }),
+    );
+  } catch {
+    const input = ui.querySelector<HTMLSelectElement>('[name="graphics"]');
+    if (input) input.value = graphics;
+    const status = ui.querySelector("#graphics-status");
+    if (status)
+      status.textContent =
+        "Could not save this change. Keep this tab open; your current game is still here.";
+    return;
+  }
+  location.reload();
+}
 function title() {
   return `<main class="title-layout"><div class="brand"><span class="brand-icon">✦</span> A LITTLE WORLD OF CHOICES <span class="edition">3D EDITION</span></div>
  <section class="title-copy"><p class="eyebrow">A LITTLE WORLD. A WHOLE LIFE.</p><h1>Choice<br> of <em>Life.</em></h1><p class="title-description">The people you meet. <br>The paths you take. <br>The little things you leave behind.</p><div class="title-tags"><span>12 chapters</span><span>Your own story</span><span>At your pace</span></div>
  <div class="start-actions">${saved ? btn("continue", "Continue your story <span>↗</span>", "primary play-button", loading ? "disabled" : "") : ""}${btn("start", saved ? "Begin a new life" : "Play your story <span>↗</span>", saved ? "secondary" : "primary play-button", loading ? "disabled" : "")}</div>
  <p class="load-state" role="status">${loadError ? esc(loadError) : loading ? "Making a little room for you…" : saved ? `Saved at chapter ${saved.chapter + 1} · ${esc(chapters[saved.chapter].title)}` : "Move, explore, and make the next moment yours."}</p>${loadError ? btn("retry", "Retry loading", "secondary") : ""}
- <details class="personalise"><summary>Make it yours <span>＋</span></summary><div class="setup-fields"><label>Your name<input name="name" maxlength="24" value="${esc(identity.name === "You" ? "" : identity.name)}" placeholder="Your name" autocomplete="off"></label><label>Character<select name="gender"><option value="female" ${identity.gender === "female" ? "selected" : ""}>Female</option><option value="male" ${identity.gender === "male" ? "selected" : ""}>Male</option></select></label><label>Skin tone<select name="skin">${["Warm", "Light", "Brown", "Deep"].map((n, i) => `<option value="${i}" ${identity.skin === i ? "selected" : ""}>${n}</option>`).join("")}</select></label><label>Pace<select name="pace">${["gentle", "normal", "brisk"].map((n) => `<option ${pace === n ? "selected" : ""}>${n}</option>`).join("")}</select></label></div></details>
+ <details class="personalise"><summary>Make it yours <span>＋</span></summary><div class="setup-fields"><label>Your name<input name="name" maxlength="24" value="${esc(identity.name === "You" ? "" : identity.name)}" placeholder="Your name" autocomplete="off"></label><label>Character<select name="gender"><option value="female" ${identity.gender === "female" ? "selected" : ""}>Female</option><option value="male" ${identity.gender === "male" ? "selected" : ""}>Male</option></select></label><label>Skin tone<select name="skin">${["Warm", "Light", "Brown", "Deep"].map((n, i) => `<option value="${i}" ${identity.skin === i ? "selected" : ""}>${n}</option>`).join("")}</select></label><label>Pace<select name="pace">${["gentle", "normal", "brisk"].map((n) => `<option ${pace === n ? "selected" : ""}>${n}</option>`).join("")}</select></label></div>${graphicsControl()}</details>
  ${invalidSave ? '<p class="warning">An older or damaged 3D save could not be read. It is kept until you choose to begin a new life.</p>' : ""}
  ${storageIssue ? '<p class="warning">Saving is unavailable in this browser. You can play, but keep this tab open to retain this session.</p>' : ""}
  </section><p class="scene-caption"><span>01 / THE BEGINNING</span>A room full of possibilities</p><footer class="title-footer"><span>Built from small, meaningful choices.</span><div>${btn("sound", sound ? "♫ Sound on" : "♫ Sound off")}${btn("motion", reduced ? "Gentle motion" : "Full motion")}</div></footer></main>`;
@@ -273,7 +325,7 @@ function panelUI() {
     content = `<p>Your current 3D life will be replaced when you begin. You can read your memories before starting again.</p><div class="menu-actions">${btn("new-confirm", "Begin a new life", "primary")}${btn("cancel-restart", "Keep my current life", "secondary")}</div>`;
   } else {
     heading = "A moment to breathe";
-    content = `<p>${storageIssue ? "Saving is unavailable. Keep this tab open to keep playing your current story." : "Your story is saved. Come back when you are ready."}</p><div class="menu-actions">${btn("close", "Return to your story", "primary")}${btn("text-size", largeText ? "Text: large" : "Text: comfortable", "secondary")}${btn("closeups", closeups ? "Conversation close-ups: on" : "Conversation close-ups: off", "secondary")}${btn("motion", reduced ? "Reduced motion: on" : "Reduced motion: off", "secondary")}${btn("sound", sound ? "Sound: on" : "Sound: off", "secondary")}${btn("title", "Save & return to title", "quiet")}</div><p class="help-copy">Move: WASD or arrows · Interact: E or Space · Pause: Esc<br>Touch: use the pad or tap a destination.<br>Explore offers an automatic walk to each story moment.</p>`;
+    content = `<p>${storageIssue ? "Saving is unavailable. Keep this tab open to keep playing your current story." : "Your story is saved. Come back when you are ready."}</p><div class="menu-actions">${btn("close", "Return to your story", "primary")}${graphicsControl()}${btn("text-size", largeText ? "Text: large" : "Text: comfortable", "secondary")}${btn("closeups", closeups ? "Conversation close-ups: on" : "Conversation close-ups: off", "secondary")}${btn("motion", reduced ? "Reduced motion: on" : "Reduced motion: off", "secondary")}${btn("sound", sound ? "Sound: on" : "Sound: off", "secondary")}${btn("title", "Save & return to title", "quiet")}</div><p class="help-copy">Move: WASD or arrows · Interact: E or Space · Pause: Esc<br>Touch: use the pad or tap a destination.<br>Explore offers an automatic walk to each story moment.</p>`;
   }
   return `<div class="modal-shade"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><header><h2 id="modal-title" tabindex="-1">${heading}</h2>${btn("close", "×", "close", 'aria-label="Close panel"')}</header>${content}</section></div>`;
 }
@@ -614,6 +666,10 @@ ui.addEventListener("click", async (event) => {
 });
 ui.addEventListener("change", (event) => {
   const input = event.target as HTMLInputElement;
+  if (input.name === "graphics") {
+    changeGraphics(graphicsQuality(input.value, phone));
+    return;
+  }
   if (input.name === "gender")
     identity = {
       ...identity,

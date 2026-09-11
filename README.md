@@ -10,6 +10,7 @@ Little moments. A whole life. A self-paced 3D life adventure built with **Blende
 - [0.1.1 code and logic review](docs/REVIEW_2026-09-11.md)
 - [Playable-story implementation plan, 0.3.0](docs/STORY_EXPERIENCE_PLAN_0.3.0.md)
 - [Story release review, 0.3.0](docs/STORY_REVIEW_0.3.0.md)
+- [Mobile graphics profiles and review, 0.3.1](docs/MOBILE_GRAPHICS_0.3.1.md)
 - [Implementation and review record](docs/IMPLEMENTATION_STATUS.md)
 
 Explore twelve chapters from a family nursery to a legacy garden. Meet recurring people, discover small treasures, choose an education and career, decide what home means to you, and open a book of memories at the end. Health, Happiness, and Money remain separate outcomes.
@@ -52,6 +53,20 @@ npm run smoke
 ```
 
 The story smoke uses valid isolated chapter fixtures and real UI/pathfinding for the reviewed interactions. It checks partial activity save/reload, planner undo, supported tuition, the clinic workday, partner introductions, later partner presence and a twelve-chapter ending. `node scripts/smoke.mjs` retains the longer all-encounter route. Neither runs a seed matrix. Screenshots are local review artifacts in `docs/captures/`.
+
+## Mobile graphics
+
+Open **Make it yours → Graphics detail** on the title screen or **Pause → Graphics
+detail** while playing. Low detail uses simpler models, lower 3D resolution, lighter
+lighting and a 30 FPS rendering limit. Text, controls and story content are unchanged.
+Phones start with Low detail unless you have already saved another preference.
+Switching saves the life and reloads the title; choose **Continue** to resume.
+
+The full-detail models remain available. Regenerate their lightweight counterparts
+after changing the art with `blender --background --python art/build_low_detail.py`.
+The focused mobile check is `node scripts/graphics-smoke.mjs` against port 4196 or
+`GAME_URL`. See [the graphics record](docs/MOBILE_GRAPHICS_0.3.1.md) for budgets and
+the distinction between emulated browser checks and real-phone performance.
 
 ## Publishing
 

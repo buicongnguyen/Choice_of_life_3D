@@ -2,6 +2,7 @@ import * as T from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { lightWorld } from "./lighting";
 import { modelURL } from "./asset-url";
+import { graphicsProfile, type GraphicsQuality } from "./graphics";
 import { chapters, careerFor } from "./content";
 import { resolved, chapterDone, type Life } from "./core";
 import { activity, guestNames, keepsakes, record } from "./journey";
@@ -71,6 +72,7 @@ export class World {
   private clock = 0;
   private accumulator = 0;
   private last = 0;
+  private lastPaint = 0;
   private frame = 0;
   private keys = new Set<string>();
   private touch = { x: 0, y: 0 };
@@ -95,14 +97,23 @@ export class World {
   private acknowledgement = 0;
   closeups = true;
 
-  constructor(private host: HTMLElement) {
+  private graphics;
+  constructor(
+    private host: HTMLElement,
+    readonly quality: GraphicsQuality = "high",
+  ) {
+    this.graphics = graphicsProfile(quality, devicePixelRatio);
     this.renderer = new T.WebGLRenderer({
-      antialias: true,
+      antialias: this.graphics.antialias,
       alpha: true,
-      powerPreference: "high-performance",
+      powerPreference: this.graphics.low ? "low-power" : "high-performance",
     });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
-    this.releaseLighting = lightWorld(this.scene, this.renderer);
+    this.renderer.setPixelRatio(this.graphics.pixelRatio);
+    this.releaseLighting = lightWorld(
+      this.scene,
+      this.renderer,
+      this.graphics.low,
+    );
     host.append(this.renderer.domElement);
     this.renderer.domElement.setAttribute("aria-hidden", "true");
     this.camera.position.set(10, 14, 18);
@@ -143,8 +154,36 @@ export class World {
       this.models.set(
         name,
         this.loader
-          .loadAsync(modelURL(`${name}.glb`))
-          .then((g) => g.scene)
+          .loadAsync(modelURL(`${this.graphics.modelFolder}${name}.glb`))
+          .then((g) => {
+            if (this.graphics.low) {
+              // Share lightweight source materials; actor instances clone before tinting.
+              const converted = new Map<T.Material, T.Material>();
+              const simplify = (m: T.Material) => {
+                if (!converted.has(m) && m instanceof T.MeshStandardMaterial) {
+                  const simple = new T.MeshLambertMaterial({
+                    color: m.color,
+                    emissive: m.emissive,
+                    side: m.side,
+                    transparent: m.transparent,
+                    opacity: m.opacity,
+                    alphaTest: m.alphaTest,
+                  });
+                  simple.name = m.name;
+                  converted.set(m, simple);
+                }
+                return converted.get(m) ?? m;
+              };
+              g.scene.traverse((o) => {
+                if (o instanceof T.Mesh)
+                  o.material = Array.isArray(o.material)
+                    ? o.material.map(simplify)
+                    : simplify(o.material);
+              });
+              for (const original of converted.keys()) original.dispose();
+            }
+            return g.scene;
+          })
           .catch((e) => {
             this.models.delete(name);
             throw e;
@@ -156,8 +195,8 @@ export class World {
     const root = model.clone(true);
     root.traverse((o) => {
       if (o instanceof T.Mesh) {
-        o.castShadow = true;
-        o.receiveShadow = true;
+        o.castShadow = this.graphics.shadows;
+        o.receiveShadow = this.graphics.shadows;
         if (Array.isArray(o.material))
           o.material = o.material.map((m) => m.clone());
         else o.material = o.material.clone();
@@ -178,7 +217,10 @@ export class World {
       if (o instanceof T.Mesh) {
         const mats = Array.isArray(o.material) ? o.material : [o.material];
         for (const m of mats) {
-          if (m instanceof T.MeshStandardMaterial) {
+          if (
+            m instanceof T.MeshStandardMaterial ||
+            m instanceof T.MeshLambertMaterial
+          ) {
             if (m.name.startsWith("teal")) m.color.set(color);
             if (m.name.startsWith("skin")) m.color.set(skin);
             if (m.name.startsWith("hair")) {
@@ -190,6 +232,22 @@ export class World {
         }
       }
     });
+    if (this.graphics.low) {
+      // A cheap contact patch grounds characters without rendering shadow maps.
+      const contact = new T.Mesh(
+        new T.CircleGeometry(0.32, 16),
+        new T.MeshBasicMaterial({
+          color: 0x304a3d,
+          transparent: true,
+          opacity: 0.16,
+          depthWrite: false,
+        }),
+      );
+      contact.rotation.x = -Math.PI / 2;
+      contact.position.y = 0.015;
+      contact.userData.ownedGeometry = true;
+      root.add(contact);
+    }
     return {
       root,
       limbs: ["ArmL", "ArmR", "LegL", "LegR"].map((n) =>
@@ -500,30 +558,32 @@ export class World {
       pet.rotation.y = 0.8;
       this.cast.add(pet);
     }
-    const positions = new Float32Array(30 * 3);
-    for (let i = 0; i < positions.length; i += 3) {
-      positions[i] = Math.sin(i * 5.7) * 6;
-      positions[i + 1] = 0.8 + (i % 9) / 4;
-      positions[i + 2] = Math.cos(i * 3.2) * 4;
+    if (!this.graphics.low) {
+      const positions = new Float32Array(30 * 3);
+      for (let i = 0; i < positions.length; i += 3) {
+        positions[i] = Math.sin(i * 5.7) * 6;
+        positions[i + 1] = 0.8 + (i % 9) / 4;
+        positions[i + 2] = Math.cos(i * 3.2) * 4;
+      }
+      const geometry = new T.BufferGeometry();
+      geometry.setAttribute("position", new T.BufferAttribute(positions, 3));
+      this.sparkle = new T.Points(
+        geometry,
+        new T.PointsMaterial({
+          color: 0xfff6cd,
+          size: 0.035,
+          transparent: true,
+          opacity: 0.6,
+        }),
+      );
+      this.sparkle.userData.ownedGeometry = true;
+      this.fx.add(this.sparkle);
     }
-    const geometry = new T.BufferGeometry();
-    geometry.setAttribute("position", new T.BufferAttribute(positions, 3));
-    this.sparkle = new T.Points(
-      geometry,
-      new T.PointsMaterial({
-        color: 0xfff6cd,
-        size: 0.035,
-        transparent: true,
-        opacity: 0.6,
-      }),
-    );
-    this.sparkle.userData.ownedGeometry = true;
-    this.fx.add(this.sparkle);
     this.update(state);
     this.resize();
     this.renderer.render(this.scene, this.camera);
     const next = chapters[state.chapter + 1];
-    if (next) void this.load(next.scene).catch(() => {});
+    if (next && !this.graphics.low) void this.load(next.scene).catch(() => {});
   }
   private accessory(root: T.Group, career: string) {
     if (/doctor|nurse|Care assistant/i.test(career)) {
@@ -768,6 +828,9 @@ export class World {
     this.camera.top = span / 2;
     this.camera.bottom = -span / 2;
     this.camera.updateProjectionMatrix();
+    // Resizing clears the drawing buffer. Repaint immediately so the 30 FPS cap
+    // cannot leave empty frames between layout/rotation updates.
+    this.renderer.render(this.scene, this.camera);
   }
   focus(id: string | null) {
     if (id !== this.conversationId) {
@@ -918,12 +981,21 @@ export class World {
       this.step(1 / 60);
       this.accumulator -= 1 / 60;
     }
+    // Keep input/navigation simulation at 60 Hz; only painting is quality-limited.
+    const interval = 1000 / this.graphics.maxFPS;
+    const elapsed = ms - this.lastPaint;
+    if (elapsed < interval - 0.5) {
+      this.frame = requestAnimationFrame(this.tick);
+      return;
+    }
+    this.lastPaint = ms - (Math.max(0, elapsed - interval) % interval);
+    const animationDt = Math.min(elapsed / 1000, 0.08);
     if (this.player)
       this.animate(this.player, this.active && this.walking, this.clock);
     for (let i = 0; i < this.actors.length; i++)
       this.animate(this.actors[i], false, this.clock + i);
     if (this.acknowledgement > 0 && !document.hidden) {
-      this.acknowledgement = Math.max(0, this.acknowledgement - dt);
+      this.acknowledgement = Math.max(0, this.acknowledgement - animationDt);
       const point = this.points.find((p) => p.place.id === this.conversationId);
       const actor = this.actors.find((a) => a.root === point?.root);
       if (actor?.head && !this.reducedMotion)
@@ -948,6 +1020,14 @@ export class World {
   };
   diagnostics() {
     return {
+      quality: this.quality,
+      pixelRatio: this.renderer.getPixelRatio(),
+      shadows: this.renderer.shadowMap.enabled,
+      maxFPS: this.graphics.maxFPS,
+      buffer: {
+        width: this.renderer.domElement.width,
+        height: this.renderer.domElement.height,
+      },
       drawCalls: this.renderer.info.render.calls,
       triangles: this.renderer.info.render.triangles,
       position: { x: this.playerPosition.x, z: this.playerPosition.z },

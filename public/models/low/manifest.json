@@ -1,0 +1,127 @@
+{
+  "generator": "Blender / art/build_low_detail.py",
+  "sourceRevision": "crafted-realism-0.2.0",
+  "textures": false,
+  "detail": {
+    "home": {
+      "bytes": 1345588,
+      "triangles": 39716,
+      "sourceBytes": 2082716,
+      "sourceTriangles": 46760
+    },
+    "school": {
+      "bytes": 1556416,
+      "triangles": 41458,
+      "sourceBytes": 2332064,
+      "sourceTriangles": 47756
+    },
+    "campus": {
+      "bytes": 1557044,
+      "triangles": 41458,
+      "sourceBytes": 2332908,
+      "sourceTriangles": 47756
+    },
+    "office": {
+      "bytes": 1846100,
+      "triangles": 49222,
+      "sourceBytes": 2689828,
+      "sourceTriangles": 54620
+    },
+    "town": {
+      "bytes": 1962308,
+      "triangles": 76956,
+      "sourceBytes": 3069928,
+      "sourceTriangles": 87204
+    },
+    "garden": {
+      "bytes": 1403220,
+      "triangles": 64174,
+      "sourceBytes": 2353620,
+      "sourceTriangles": 75528
+    },
+    "male": {
+      "bytes": 288536,
+      "triangles": 12461,
+      "sourceBytes": 710356,
+      "sourceTriangles": 25614
+    },
+    "female": {
+      "bytes": 327524,
+      "triangles": 14525,
+      "sourceBytes": 818812,
+      "sourceTriangles": 30054
+    },
+    "baby": {
+      "bytes": 246820,
+      "triangles": 11342,
+      "sourceBytes": 626988,
+      "sourceTriangles": 23100
+    },
+    "cat": {
+      "bytes": 63352,
+      "triangles": 3092,
+      "sourceBytes": 290624,
+      "sourceTriangles": 10318
+    },
+    "apple": {
+      "bytes": 17128,
+      "triangles": 744,
+      "sourceBytes": 75652,
+      "sourceTriangles": 1896
+    },
+    "book": {
+      "bytes": 46760,
+      "triangles": 808,
+      "sourceBytes": 100440,
+      "sourceTriangles": 2104
+    },
+    "coins": {
+      "bytes": 56272,
+      "triangles": 2848,
+      "sourceBytes": 268148,
+      "sourceTriangles": 10184
+    },
+    "boat": {
+      "bytes": 21488,
+      "triangles": 614,
+      "sourceBytes": 79848,
+      "sourceTriangles": 1176
+    },
+    "tin": {
+      "bytes": 34508,
+      "triangles": 854,
+      "sourceBytes": 85388,
+      "sourceTriangles": 2088
+    },
+    "blanket": {
+      "bytes": 38948,
+      "triangles": 1052,
+      "sourceBytes": 128116,
+      "sourceTriangles": 3768
+    },
+    "rattle": {
+      "bytes": 22136,
+      "triangles": 1002,
+      "sourceBytes": 117824,
+      "sourceTriangles": 3600
+    },
+    "plant": {
+      "bytes": 23444,
+      "triangles": 924,
+      "sourceBytes": 110556,
+      "sourceTriangles": 2696
+    },
+    "letter": {
+      "bytes": 23472,
+      "triangles": 749,
+      "sourceBytes": 45656,
+      "sourceTriangles": 1269
+    },
+    "ball": {
+      "bytes": 27400,
+      "triangles": 1408,
+      "sourceBytes": 127396,
+      "sourceTriangles": 5040
+    }
+  }
+}
