@@ -2,6 +2,8 @@
 
 Design revision: 11 September 2026. Target: the 0.1.1 refinement release.
 
+Art amendment, 0.2.0: [`art/ART_DIRECTION.md`](art/ART_DIRECTION.md) specifies the rebuilt, detailed Blender models, embedded surface textures, shared calibrated lighting and close-up asset viewer. The map, progression, scale and save contracts below remain unchanged. The previous flat-clay surface treatment is superseded by that art amendment.
+
 This is the implementation contract for this repository, not a promise of an AAA-sized production. `IMPLEMENTATION_PLAN.md` records the original conversion plan. This document refines it into concrete UI, map, movement, activity, story, and reliability rules. Sections 1–9 define this release; section 10 is explicitly future work.
 
 ## 1. Experience and scope

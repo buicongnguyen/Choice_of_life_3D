@@ -1,27 +1,130 @@
 {
   "author": "Choice of Life 3D project",
-  "generator": "Blender 4.5 / art/build_assets.py",
-  "license": "Original project-generated geometry; no external meshes or textures",
+  "generator": "Blender 4.5 / art/build_crafted_assets.py",
+  "revision": "crafted-realism-0.2.0",
+  "license": "Original project-generated geometry and procedural textures; no external assets",
   "files": {
-    "apple.glb": 29796,
-    "baby.glb": 165624,
-    "ball.glb": 32956,
-    "blanket.glb": 22876,
-    "boat.glb": 16136,
-    "book.glb": 18176,
-    "campus.glb": 444660,
-    "cat.glb": 103376,
-    "coins.glb": 20256,
-    "female.glb": 236680,
-    "garden.glb": 850260,
-    "home.glb": 365304,
-    "letter.glb": 15492,
-    "male.glb": 200344,
-    "office.glb": 390972,
-    "plant.glb": 49104,
-    "rattle.glb": 21048,
-    "school.glb": 444840,
-    "tin.glb": 22368,
-    "town.glb": 862864
+    "home.glb": 2082716,
+    "school.glb": 2332064,
+    "campus.glb": 2332908,
+    "office.glb": 2689828,
+    "town.glb": 3069928,
+    "garden.glb": 2353620,
+    "male.glb": 710356,
+    "female.glb": 818812,
+    "baby.glb": 626988,
+    "cat.glb": 290624,
+    "apple.glb": 75652,
+    "book.glb": 100440,
+    "coins.glb": 268148,
+    "boat.glb": 79848,
+    "tin.glb": 85388,
+    "blanket.glb": 128116,
+    "rattle.glb": 117824,
+    "plant.glb": 110556,
+    "letter.glb": 45656,
+    "ball.glb": 127396
+  },
+  "detail": {
+    "home": {
+      "bytes": 2082716,
+      "triangles": 46760,
+      "meshes": 16
+    },
+    "school": {
+      "bytes": 2332064,
+      "triangles": 47756,
+      "meshes": 16
+    },
+    "campus": {
+      "bytes": 2332908,
+      "triangles": 47756,
+      "meshes": 17
+    },
+    "office": {
+      "bytes": 2689828,
+      "triangles": 54620,
+      "meshes": 16
+    },
+    "town": {
+      "bytes": 3069928,
+      "triangles": 87204,
+      "meshes": 20
+    },
+    "garden": {
+      "bytes": 2353620,
+      "triangles": 75528,
+      "meshes": 18
+    },
+    "male": {
+      "bytes": 710356,
+      "triangles": 25614,
+      "meshes": 29
+    },
+    "female": {
+      "bytes": 818812,
+      "triangles": 30054,
+      "meshes": 31
+    },
+    "baby": {
+      "bytes": 626988,
+      "triangles": 23100,
+      "meshes": 26
+    },
+    "cat": {
+      "bytes": 290624,
+      "triangles": 10318,
+      "meshes": 6
+    },
+    "apple": {
+      "bytes": 75652,
+      "triangles": 1896,
+      "meshes": 4
+    },
+    "book": {
+      "bytes": 100440,
+      "triangles": 2104,
+      "meshes": 5
+    },
+    "coins": {
+      "bytes": 268148,
+      "triangles": 10184,
+      "meshes": 2
+    },
+    "boat": {
+      "bytes": 79848,
+      "triangles": 1176,
+      "meshes": 6
+    },
+    "tin": {
+      "bytes": 85388,
+      "triangles": 2088,
+      "meshes": 4
+    },
+    "blanket": {
+      "bytes": 128116,
+      "triangles": 3768,
+      "meshes": 2
+    },
+    "rattle": {
+      "bytes": 117824,
+      "triangles": 3600,
+      "meshes": 4
+    },
+    "plant": {
+      "bytes": 110556,
+      "triangles": 2696,
+      "meshes": 4
+    },
+    "letter": {
+      "bytes": 45656,
+      "triangles": 1269,
+      "meshes": 5
+    },
+    "ball": {
+      "bytes": 127396,
+      "triangles": 5040,
+      "meshes": 2
+    }
   }
 }

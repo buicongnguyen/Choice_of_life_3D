@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#e9ecdc" />
+    <title>Crafted assets · Choice of Life 3D</title>
+  </head>
+  <body>
+    <main id="gallery">
+      <header>
+        <a href="./">← Play the game</a>
+        <div>
+          <p>CHOICE OF LIFE · ART COLLECTION</p>
+          <h1>Made of little details.</h1>
+        </div>
+        <label
+          >Inspect a model<select id="asset" aria-label="Model"></select
+        ></label>
+      </header>
+      <div
+        id="stage"
+        aria-label="Interactive 3D model; drag to rotate and pinch to zoom"
+      ></div>
+      <footer>
+        <div>
+          <strong id="model-name">Loading…</strong>
+          <p id="description" role="status">Opening the Blender model.</p>
+        </div>
+        <div class="tools">
+          <button id="previous" aria-label="Previous model">←</button
+          ><button id="reset">Reset view</button
+          ><button id="next" aria-label="Next model">→</button>
+        </div>
+        <small>Actual game GLBs · Drag to orbit · Scroll / pinch to zoom</small>
+      </footer>
+    </main>
+    <script type="module" src="/src/asset-gallery.ts"></script>
+  </body>
+</html>

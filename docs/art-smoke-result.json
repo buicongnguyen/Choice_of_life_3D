@@ -1,0 +1,141 @@
+{
+  "base": "http://127.0.0.1:4194/",
+  "result": "pass",
+  "checkedAt": "2026-09-11T05:06:27.409Z",
+  "revision": "crafted-realism-0.2.0",
+  "bytes": 18446868,
+  "errors": [],
+  "checks": [
+    {
+      "loaded": "home",
+      "drawCalls": 33,
+      "triangles": 93584
+    },
+    {
+      "loaded": "school",
+      "drawCalls": 33,
+      "triangles": 95576
+    },
+    {
+      "loaded": "campus",
+      "drawCalls": 35,
+      "triangles": 95576
+    },
+    {
+      "loaded": "office",
+      "drawCalls": 33,
+      "triangles": 109304
+    },
+    {
+      "loaded": "town",
+      "drawCalls": 41,
+      "triangles": 174472
+    },
+    {
+      "loaded": "garden",
+      "drawCalls": 37,
+      "triangles": 151120
+    },
+    {
+      "loaded": "male",
+      "drawCalls": 59,
+      "triangles": 51292
+    },
+    {
+      "loaded": "female",
+      "drawCalls": 63,
+      "triangles": 60172
+    },
+    {
+      "loaded": "baby",
+      "drawCalls": 53,
+      "triangles": 46264
+    },
+    {
+      "loaded": "cat",
+      "drawCalls": 13,
+      "triangles": 20700
+    },
+    {
+      "loaded": "apple",
+      "drawCalls": 9,
+      "triangles": 3856
+    },
+    {
+      "loaded": "book",
+      "drawCalls": 11,
+      "triangles": 4272
+    },
+    {
+      "loaded": "coins",
+      "drawCalls": 5,
+      "triangles": 20432
+    },
+    {
+      "loaded": "boat",
+      "drawCalls": 13,
+      "triangles": 2416
+    },
+    {
+      "loaded": "tin",
+      "drawCalls": 9,
+      "triangles": 4240
+    },
+    {
+      "loaded": "blanket",
+      "drawCalls": 5,
+      "triangles": 7600
+    },
+    {
+      "loaded": "rattle",
+      "drawCalls": 9,
+      "triangles": 7264
+    },
+    {
+      "loaded": "plant",
+      "drawCalls": 9,
+      "triangles": 5456
+    },
+    {
+      "loaded": "letter",
+      "drawCalls": 11,
+      "triangles": 2602
+    },
+    {
+      "loaded": "ball",
+      "drawCalls": 5,
+      "triangles": 10144
+    }
+  ],
+  "game": {
+    "mode": "play",
+    "panel": "none",
+    "loading": false,
+    "chapter": 0,
+    "complete": false,
+    "choices": 1,
+    "discoveries": 0,
+    "render": {
+      "drawCalls": 232,
+      "triangles": 286570,
+      "position": {
+        "x": -1.431263509193281,
+        "z": 0.2589586093916676
+      },
+      "models": [
+        "male",
+        "female",
+        "baby",
+        "cat",
+        "home",
+        "blanket",
+        "rattle",
+        "coins"
+      ],
+      "playerVisible": true,
+      "scale": 1,
+      "walking": false,
+      "routePoints": 0
+    }
+  }
+}

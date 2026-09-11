@@ -86,7 +86,7 @@ try {
   const gate = new Promise((resolve) => {
     releaseRoom = resolve;
   });
-  await transition.route("**/school.glb", async (route) => {
+  await transition.route("**/school.glb*", async (route) => {
     await gate;
     await route.continue();
   });

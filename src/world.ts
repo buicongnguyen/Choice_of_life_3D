@@ -1,5 +1,7 @@
 import * as T from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { lightWorld } from "./lighting";
+import { modelURL } from "./asset-url";
 import { chapters, careerFor } from "./content";
 import { resolved, chapterDone, type Life } from "./core";
 import {
@@ -29,7 +31,6 @@ type Actor = {
 const palette = { health: 0xdc8b79, happiness: 0xe7b75a, money: 0x77aba0 };
 const material = (color: number) =>
   new T.MeshStandardMaterial({ color, roughness: 0.8 });
-const modelURL = (name: string) => `${import.meta.env.BASE_URL}models/${name}`;
 const props = [
   ["blanket", "rattle", "coins"],
   ["apple", "boat", "coins"],
@@ -87,6 +88,7 @@ export class World {
   onPosition: () => void = () => {};
   private lastNearby = "";
   private timeToSave = 0;
+  private releaseLighting: () => void;
 
   constructor(private host: HTMLElement) {
     this.renderer = new T.WebGLRenderer({
@@ -95,30 +97,11 @@ export class World {
       powerPreference: "high-performance",
     });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = T.PCFSoftShadowMap;
-    this.renderer.outputColorSpace = T.SRGBColorSpace;
-    this.renderer.toneMapping = T.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.35;
+    this.releaseLighting = lightWorld(this.scene, this.renderer);
     host.append(this.renderer.domElement);
     this.renderer.domElement.setAttribute("aria-hidden", "true");
     this.camera.position.set(10, 14, 18);
     this.camera.lookAt(0, 0.2, 0);
-    this.scene.add(new T.HemisphereLight(0xfff4da, 0x8faba2, 2.5));
-    const sun = new T.DirectionalLight(0xffe3b0, 3.8);
-    sun.position.set(-5, 12, 6);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
-    sun.shadow.camera.left = -10;
-    sun.shadow.camera.right = 10;
-    sun.shadow.camera.top = 10;
-    sun.shadow.camera.bottom = -10;
-    sun.shadow.normalBias = 0.045;
-    sun.shadow.bias = -0.0002;
-    this.scene.add(sun);
-    const fill = new T.DirectionalLight(0xc8eaff, 1.2);
-    fill.position.set(6, 6, -5);
-    this.scene.add(fill);
     const under = new T.Mesh(
       new T.CircleGeometry(11, 64),
       new T.MeshBasicMaterial({
@@ -193,7 +176,11 @@ export class World {
           if (m instanceof T.MeshStandardMaterial) {
             if (m.name.startsWith("teal")) m.color.set(color);
             if (m.name.startsWith("skin")) m.color.set(skin);
-            if (m.name.startsWith("hair")) m.color.set(hair);
+            if (m.name.startsWith("hair")) {
+              m.color.set(hair);
+              if (m.name.startsWith("hair_glint"))
+                m.color.lerp(new T.Color(0xc0a17d), 0.22);
+            }
           }
         }
       }
@@ -857,6 +844,7 @@ export class World {
     this.release(this.room);
     this.release(this.cast);
     this.release(this.fx);
+    this.releaseLighting();
     this.renderer.dispose();
   }
 }

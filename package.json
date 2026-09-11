@@ -1,6 +1,6 @@
 {
   "name": "choice-of-life-3d",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "A warm 3D life adventure, built with Blender and Three.js.",
