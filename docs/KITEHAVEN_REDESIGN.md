@@ -1,4 +1,4 @@
-# Choice of Life: Kitehaven — evaluation and redesign (1.0.0, 1.1.0)
+# Choice of Life: Kitehaven — evaluation and redesign (1.0.0, 1.1.0, 1.2.0)
 
 This release replaces the 0.3 "little world of choices" with a new story, new rules,
 twelve new Blender dioramas, new characters, a new renderer look and a new interface.
@@ -190,7 +190,7 @@ An audit at 1366×768 (a typical laptop) and 1920×1080 (`scripts/audit-ui.mjs`,
 - **Sound** (off by default): each person has their own soft "voice" murmur as their words
   appear, plus a synthesised ambience of surf, wind, rain or a quiet room to suit the chapter.
 
-### Ideas for later
+### Ideas for later (all seven shipped in 1.2.0, see section 6)
 1. A music-box theme that grows with you: a lullaby in the nursery, a brass band at the vote,
    and the same tune on the clifftop at the end.
 2. A lives album: remember every ending you've reached, with the "who came to the last
@@ -201,3 +201,74 @@ An audit at 1366×768 (a typical laptop) and 1920×1080 (`scripts/audit-ui.mjs`,
 5. A living town: townsfolk walking their own routes, with seasons and fireworks at the festival.
 6. A "what if?" branch map in the journal, showing the paths not taken.
 7. Localisation: the beat system makes translated text easier to fit.
+
+
+## 6. 1.2.0: the seven ideas, built
+
+### A music box that grows up with you
+The harbour song (the one Mum hums in chapter 1) is the game's only tune, synthesised live on a
+music box (`src/audio.ts`). Its arrangement follows your age: a lone music box in the
+nursery, a bass line once you can walk, bells and a festival arpeggio at the kite festival,
+minor and sparse in the storm, a warm low voice in old age, and every voice together at the last
+festival and on the ending. Music has its own switch in Pause. Like all sound, it's off until
+you turn sound on.
+
+### The album of lives
+Every finished life is kept on the device (`choice-of-life-album`, separate from the save, so
+beginning a new life never forgets old ones). The album shows the six endings, found or still
+hidden (each hidden one has a hint), and each life's kite, ending and who came to the last
+festival. The ending screen can **save a picture** (1080×1350) of that festival: your ending,
+your painted kite, the portraits of everyone who came, and the town at dusk. On phones it can
+also **share** it.
+
+### Faces
+Characters have new face parts built in Blender: closed happy eyes (^ ^), a frown, and
+eyebrows on their own pivots. The person you talk to wears a mood while they ask (a table per
+moment: Rowan is worried in the storm and sad on the platform, Mum is sad in the ribbons scene)
+and reacts to your answer from what it did to them. Warmth makes them beam, and a cold choice
+makes them cross or sad. Brows lift or knit, heads droop, eyes go wide.
+
+### The kite workshop
+Your kite now has a pattern and a second colour (journal → **Kite**). Patterns are earned by
+what you did: stripes for your first steps, waves for mending Rowan's boat, stars for the
+treasure trail, a sunburst for flying at the festival, a lighthouse for keeping the light on,
+hearts for a five-heart bond, picnic checks for saving the rooftop party. One painter
+(`src/kite-art.ts`) draws it everywhere: the workshop, the kite game, the title screen, the
+3D kite that flies over every outdoor chapter, the kite you release at the end, the album and
+the picture card. The design is cosmetic, so it's saved beside the action log, not in it.
+
+### A living town
+- **Townsfolk** in warm, bright clothes stroll their own routes through the outdoor scenes
+  (pathfinding around the furniture, never through it). They stop and look at you when you
+  pass, and say something small when clicked.
+- **Seasons** follow the story. Festivals are in summer, and it's winter in the kitchen before
+  the spring voyage. The HUD and chapter card show the season. Spring brings blossom, autumn
+  brings falling leaves, and summer keeps its festival confetti.
+- **Fireworks** over the rooftop party and the last festival, slow at first and then a
+  celebration once the main story is done. They use HDR colour so the bloom makes them glow.
+
+### "What if?"
+Journal → **Paths**: the big choice of every chapter you've reached, with your choice, the ones
+not taken, the ones locked by your earlier life, and the ones other lives on this device
+chose. The header counts how many paths you've explored across all your lives.
+
+### Tiếng Việt and 한국어
+The whole game is translated into Vietnamese and Korean: 830 story passages (including every
+line that changes with your earlier choices), 287 interface strings, and the ending epilogue.
+- **How it works:** every piece of story text has a stable path. A language pack
+  (`src/lang/vi`, `src/lang/ko`) supplies a string or a function for each path, and the pack
+  is loaded before a save is replayed. The rules, ids and effects never change with the
+  language, so a life started in English continues in Korean.
+- **Checks:** `src/lang-*.test.ts` verify that every path and key is present with the same
+  placeholders and balanced quotes. They render every line across 90 random lives and fail on
+  anything left in English.
+- **Words:** Korean particles are chosen at run time for names that depend on your life
+  (에이버리가 / 퀸이). Vietnamese uses a gender-neutral "bạn" and ages the characters' pronouns
+  as they grow up.
+- **Fonts:** Vietnamese uses self-hosted Be Vietnam Pro (OFL). Korean uses the system's
+  Hangul fonts, with word-level line breaking. Headings switch from the Latin display serif to
+  a bold sans.
+- **Picking a language:** it's detected from the browser. You can change it on the title
+  screen or in Pause, which reloads the page and keeps your life.
+- **Adding a language:** see [docs/i18n/README.md](i18n/README.md).
+

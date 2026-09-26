@@ -1,0 +1,351 @@
+/* Kitehaven 1.2: languages, the kite workshop, paths, the album of lives, seasons. */
+
+/* ---------- languages ---------- */
+@font-face {
+  font-family: "Be Vietnam Pro";
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/be-vietnam-pro-regular.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Be Vietnam Pro";
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/be-vietnam-pro-medium.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Be Vietnam Pro";
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/be-vietnam-pro-semibold.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Be Vietnam Pro";
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/be-vietnam-pro-bold.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Be Vietnam Pro";
+  font-weight: 800 900;
+  font-display: swap;
+  src: url("/fonts/be-vietnam-pro-extrabold.ttf") format("truetype");
+}
+/* Libre Caslon has no Vietnamese marks and no Hangul: headings go bold sans instead. */
+html[lang="vi"] {
+  --sans: "Be Vietnam Pro", system-ui, sans-serif;
+  --display: "Be Vietnam Pro", system-ui, sans-serif;
+  --display-weight: 800;
+}
+html[lang="ko"] {
+  --sans: "DM Sans", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Nanum Gothic", system-ui, sans-serif;
+  --display: "DM Sans", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+  --display-weight: 800;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+html[lang="vi"] .title h1 em,
+html[lang="ko"] .title h1 em {
+  letter-spacing: -0.02em;
+}
+html[lang="ko"] .beat .line,
+html[lang="vi"] .beat .line {
+  line-height: 1.6;
+}
+
+/* ---------- season chip ---------- */
+.season {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  margin-left: 0.4em;
+  padding: 0.12em 0.6em;
+  border-radius: 999px;
+  border: 2px solid var(--ink);
+  font-weight: 800;
+  font-size: 0.92em;
+  letter-spacing: 0;
+  text-transform: none;
+  vertical-align: 1px;
+  color: var(--ink);
+}
+.season b {
+  font-weight: 400;
+}
+.s-spring {
+  background: #ffd0dc;
+}
+.s-summer {
+  background: var(--sun-2);
+}
+.s-autumn {
+  background: #ffb27a;
+}
+.s-winter {
+  background: #d9ecff;
+}
+.cinema .season {
+  border-color: rgba(255, 255, 255, 0.85);
+}
+
+/* ---------- the kite workshop ---------- */
+.workshop {
+  display: grid;
+  grid-template-columns: minmax(150px, 220px) 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.kite-preview {
+  margin: 0;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 14px 10px 12px;
+  border: 2px solid var(--ink);
+  border-radius: 18px;
+  background: linear-gradient(180deg, #4aa8ff, #8fd0ff 60%, #fff0cf);
+}
+.kite-preview img {
+  width: 100%;
+  max-width: 200px;
+  height: auto;
+  filter: drop-shadow(0 6px 0 rgba(29, 35, 64, 0.35));
+  animation: kite-bob 3.2s ease-in-out infinite;
+}
+.kite-preview figcaption {
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  padding: 0.2em 0.8em;
+  font-weight: 800;
+  font-size: 0.86em;
+  text-align: center;
+}
+@keyframes kite-bob {
+  50% {
+    transform: translateY(-6px) rotate(3deg);
+  }
+}
+body.reduced .kite-preview img {
+  animation: none;
+}
+.workshop-tools .help {
+  margin-top: 0;
+}
+.patterns {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+.patterns button {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 8px 6px;
+  border: 2px solid var(--ink);
+  border-radius: 14px;
+  background: #fff;
+  font-weight: 700;
+  font-size: 0.84em;
+  color: var(--ink);
+}
+.patterns button img {
+  width: 48px;
+  height: 48px;
+}
+.patterns button[aria-pressed="true"] {
+  background: var(--sun);
+  box-shadow: 0 3px 0 var(--ink);
+}
+.patterns button:disabled {
+  opacity: 1;
+  background: #eef0f5;
+  color: var(--ink-2);
+  cursor: not-allowed;
+}
+.patterns button small {
+  font-weight: 500;
+  font-size: 0.86em;
+  line-height: 1.25;
+  text-align: center;
+}
+@media (max-width: 560px) {
+  .workshop {
+    grid-template-columns: 1fr;
+  }
+  .kite-preview img {
+    max-width: 140px;
+  }
+}
+
+/* ---------- paths ("What if?") ---------- */
+.explored {
+  margin: 0 0 12px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+.explored b {
+  font-size: 1.5em;
+  color: var(--ink);
+}
+.paths {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 18px;
+  border-left: 4px dotted rgba(29, 35, 64, 0.25);
+  display: grid;
+  gap: 10px;
+}
+.path-ch {
+  position: relative;
+  background: #fff;
+  border: 2px solid var(--ink);
+  border-radius: 16px;
+  padding: 8px 12px 10px;
+}
+.path-ch::before {
+  content: "";
+  position: absolute;
+  left: -29px;
+  top: 14px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #cfd4e2;
+  border: 2px solid var(--ink);
+}
+.path-ch.reached::before {
+  background: var(--sun);
+}
+.path-ch.now::before {
+  background: var(--coral);
+}
+.path-ch:not(.reached) {
+  background: rgba(255, 255, 255, 0.55);
+  border-style: dashed;
+}
+.path-ch h4 {
+  margin: 0 0 6px;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.path-ch h4 span {
+  font-size: 0.8em;
+  color: var(--ink-2);
+}
+.path-ch ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.path-ch li {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.9em;
+}
+.path-ch li i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  background: #fff;
+}
+.path-ch li small {
+  font-weight: 700;
+  font-size: 0.78em;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.st-chosen {
+  font-weight: 800;
+}
+.st-chosen i {
+  background: var(--sun) !important;
+}
+.st-other i {
+  background: var(--teal) !important;
+}
+.st-locked,
+.st-hidden {
+  color: var(--ink-2);
+}
+.st-locked i,
+.st-hidden i {
+  background: #cfd4e2 !important;
+}
+.not-yet {
+  margin: 0;
+  font-size: 0.86em;
+  color: var(--ink-2);
+}
+.tabs {
+  flex-wrap: wrap;
+}
+
+/* ---------- album of lives ---------- */
+.album .endings {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+.ending-card {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 2px dashed rgba(29, 35, 64, 0.45);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--ink-2);
+}
+.ending-card .ico {
+  font-size: 1.5em;
+  line-height: 1;
+}
+.ending-card small {
+  font-size: 0.82em;
+  line-height: 1.35;
+}
+.ending-card.got {
+  border: 2px solid var(--ink);
+  background: linear-gradient(160deg, #fff6d8, #ffd8b8);
+  color: var(--ink);
+  box-shadow: 0 3px 0 var(--ink);
+}
+.lives {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.lives li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 2px solid var(--ink);
+  border-radius: 14px;
+  background: #fff;
+}
+.lives li div {
+  display: grid;
+}
+.lives small {
+  color: var(--ink-2);
+  font-size: 0.82em;
+}
+
+/* ---------- ending extras ---------- */
+.kite-mini {
+  width: 22px;
+  height: 22px;
+  vertical-align: -5px;
+}
+.ending .actions.share {
+  margin-top: 18px;
+}

@@ -23,7 +23,15 @@ export class KiteGame {
 
   constructor(
     private canvas: HTMLCanvasElement,
-    private opts: { colour: string; wind: number; assist: boolean; reduced: boolean; onProgress: (p: { tension: number; score: number; left: number }) => void; onDone: (g: KiteGrade) => void },
+    private opts: {
+      colour: string;
+      face?: HTMLCanvasElement;
+      wind: number;
+      assist: boolean;
+      reduced: boolean;
+      onProgress: (p: { tension: number; score: number; left: number }) => void;
+      onDone: (g: KiteGrade) => void;
+    },
   ) {
     this.ctx = canvas.getContext("2d")!;
     this.duration = 20;
@@ -60,16 +68,22 @@ export class KiteGame {
     this.last = ms;
     if (!this.finished) this.simulate(dt);
     this.draw();
-    if (!this.disposed && (!this.finished || this.sparkles.length)) this.raf = requestAnimationFrame(this.frame);
+    if (!this.disposed && (!this.finished || this.sparkles.length))
+      this.raf = requestAnimationFrame(this.frame);
   };
 
   private simulate(dt: number) {
     this.t += dt;
-    const w = this.opts.wind * (this.opts.assist ? 0.5 : 1) * (this.opts.reduced ? 0.7 : 1);
-    if (Math.random() < dt * 0.55) this.gustTarget = (Math.random() - 0.35) * 0.9 * w;
+    const w =
+      this.opts.wind *
+      (this.opts.assist ? 0.5 : 1) *
+      (this.opts.reduced ? 0.7 : 1);
+    if (Math.random() < dt * 0.55)
+      this.gustTarget = (Math.random() - 0.35) * 0.9 * w;
     this.gust += (this.gustTarget - this.gust) * Math.min(1, dt * 2.2);
     this.gustTarget *= 1 - dt * 0.5;
-    const drift = Math.sin(this.t * 1.3) * 0.12 * w + Math.sin(this.t * 0.47 + 1) * 0.1 * w;
+    const drift =
+      Math.sin(this.t * 1.3) * 0.12 * w + Math.sin(this.t * 0.47 + 1) * 0.1 * w;
     this.tension += ((this.holding ? 0.5 : -0.42) + this.gust + drift) * dt;
     this.tension = Math.max(0, Math.min(1, this.tension));
     const [lo, hi] = this.band();
@@ -80,11 +94,17 @@ export class KiteGame {
       if (Math.random() < dt * 6) this.sparkles.push({ x: 0, y: 0, life: 1 });
     } else this.height = Math.max(0.12, this.height - dt * 0.06);
     const score = this.inBand / Math.max(0.001, this.t);
-    this.opts.onProgress({ tension: this.tension, score, left: Math.max(0, this.duration - this.t) });
+    this.opts.onProgress({
+      tension: this.tension,
+      score,
+      left: Math.max(0, this.duration - this.t),
+    });
     if (this.t >= this.duration) {
       this.finished = true;
       const ratio = this.inBand / this.duration;
-      this.opts.onDone(ratio >= 0.68 ? "soar" : ratio >= 0.4 ? "steady" : "wobbly");
+      this.opts.onDone(
+        ratio >= 0.68 ? "soar" : ratio >= 0.4 ? "steady" : "wobbly",
+      );
     }
   }
 
@@ -110,7 +130,12 @@ export class KiteGame {
     for (let i = 0; i < 5; i++) {
       const x = ((i * 173 + this.t * (12 + i * 4)) % (W + 160)) - 80;
       const y = 30 + ((i * 53) % (H * 0.45));
-      for (const [dx, dy, r] of [[0, 0, 22], [22, 4, 17], [-20, 6, 15], [8, -10, 16]]) {
+      for (const [dx, dy, r] of [
+        [0, 0, 22],
+        [22, 4, 17],
+        [-20, 6, 15],
+        [8, -10, 16],
+      ]) {
         g.beginPath();
         g.arc(x + dx, y + dy, r, 0, Math.PI * 2);
         g.fill();
@@ -122,7 +147,8 @@ export class KiteGame {
     g.fillStyle = "#d98f4e";
     g.fillRect(W * 0.35, H - 40, W * 0.3, 10);
     // kite
-    const sway = Math.sin(this.t * 2.1) * (1 - this.height) * 40 + this.gust * 60;
+    const sway =
+      Math.sin(this.t * 2.1) * (1 - this.height) * 40 + this.gust * 60;
     const kx = W * 0.5 + sway;
     const ky = H - 40 - this.height * (H - 110);
     const ax = W * 0.5,
@@ -131,34 +157,42 @@ export class KiteGame {
     g.lineWidth = 2;
     g.beginPath();
     g.moveTo(ax, ay);
-    g.quadraticCurveTo(ax + (kx - ax) * 0.3 + (1 - this.tension) * 60, (ay + ky) / 2 + (1 - this.tension) * 40, kx, ky + 26);
+    g.quadraticCurveTo(
+      ax + (kx - ax) * 0.3 + (1 - this.tension) * 60,
+      (ay + ky) / 2 + (1 - this.tension) * 40,
+      kx,
+      ky + 26,
+    );
     g.stroke();
     g.save();
     g.translate(kx, ky);
     g.rotate(Math.sin(this.t * 3) * 0.15 + this.gust * 0.6);
-    g.fillStyle = this.opts.colour;
-    g.beginPath();
-    g.moveTo(0, -30);
-    g.lineTo(22, -4);
-    g.lineTo(0, 30);
-    g.lineTo(-22, -4);
-    g.closePath();
-    g.fill();
-    g.fillStyle = "rgba(255,255,255,0.4)";
-    g.beginPath();
-    g.moveTo(0, -30);
-    g.lineTo(22, -4);
-    g.lineTo(0, -4);
-    g.closePath();
-    g.fill();
-    g.strokeStyle = "#7f4524";
-    g.lineWidth = 2;
-    g.beginPath();
-    g.moveTo(0, -30);
-    g.lineTo(0, 30);
-    g.moveTo(-22, -4);
-    g.lineTo(22, -4);
-    g.stroke();
+    if (this.opts.face) g.drawImage(this.opts.face, -32, -30, 64, 60);
+    else {
+      g.fillStyle = this.opts.colour;
+      g.beginPath();
+      g.moveTo(0, -30);
+      g.lineTo(22, -4);
+      g.lineTo(0, 30);
+      g.lineTo(-22, -4);
+      g.closePath();
+      g.fill();
+      g.fillStyle = "rgba(255,255,255,0.4)";
+      g.beginPath();
+      g.moveTo(0, -30);
+      g.lineTo(22, -4);
+      g.lineTo(0, -4);
+      g.closePath();
+      g.fill();
+      g.strokeStyle = "#7f4524";
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(0, -30);
+      g.lineTo(0, 30);
+      g.moveTo(-22, -4);
+      g.lineTo(22, -4);
+      g.stroke();
+    }
     const bows = ["#ffc234", "#2f7de1", "#ff5f8f", "#5fe0b7"];
     for (let i = 0; i < 4; i++) {
       const tx = Math.sin(this.t * 4 + i) * 8,

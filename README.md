@@ -6,7 +6,8 @@ choice you make decides who is still holding the string with you at the end.
 
 - [Play the game](https://buicongnguyen.github.io/Choice_of_life_3D/)
 - [Inspect every model](https://buicongnguyen.github.io/Choice_of_life_3D/asset-gallery.html)
-- [Why and how the game was redesigned (1.0.0)](docs/KITEHAVEN_REDESIGN.md)
+- [Why and how the game was redesigned (1.0 → 1.2)](docs/KITEHAVEN_REDESIGN.md)
+- Play in English, **Tiếng Việt** or **한국어** (title screen → Make it yours → Language)
 - [Art direction and the Blender pipeline](art/ART_DIRECTION.md)
 
 ## The game
@@ -23,6 +24,15 @@ choice you make decides who is still holding the string with you at the end.
 - **Six endings**, and the people you kept close come to the last festival.
 - **Made to be read comfortably:** story text arrives in short beats with 3D portraits of
   whoever is speaking, choices sit side by side, and each chapter opens like a film.
+- **Faces that react:** people beam, frown, worry or look surprised as they talk and as they
+  take your answer.
+- **Your kite, your way:** earn patterns from what you did, paint it in the workshop, and
+  watch it fly over every outdoor chapter.
+- **A living town:** townsfolk on their own walks, seasons, and fireworks at the parties.
+- **A music box that grows up with you**, from lullaby to the full festival band.
+- **An album of lives:** every ending you've found, who came to each last festival, and a
+  picture card to save or share. The journal's **Paths** tab shows the roads not taken.
+- **Three languages:** English, Vietnamese and Korean, the whole story included.
 
 ## Controls
 WASD or the arrow keys to walk, or tap or click the ground. **E** or **Space** to talk or act.
@@ -31,8 +41,9 @@ anything automatically. On touch screens, use the pad or tap to walk. The kite g
 pull the line in, release to let it out. It has a "Steady hands" assist and a skip.
 
 Make it yours: name, hairstyle, skin tone and favourite colour. Graphics: Full detail, or
-Light for phones (the default on phones). Reduced motion, large text and conversation
-close-ups are in Pause.
+Light for phones (the default on phones). Language: English, Tiếng Việt or 한국어 (it follows
+your browser at first). Reduced motion, large text, conversation close-ups, sound and music
+are in Pause.
 
 ## Development
 Node.js 22 or newer.
@@ -78,7 +89,9 @@ Fonts are self-hosted under their SIL Open Font Licenses. The Three.js licence i
 ## Saves
 A life is saved as an action log (`choice-of-life-kitehaven-v1` in local storage) and replayed
 on load, so a save can only contain states the game could have produced. Lives from the
-earlier 0.3 edition are left untouched; Kitehaven is a new story and begins fresh.
+earlier 0.3 edition are left untouched; Kitehaven is a new story and begins fresh. Your kite
+design is saved beside the log. Finished lives and every choice you've made are kept in a
+separate album (`choice-of-life-album`) that survives beginning a new life.
 
 ## Publishing
 SSH origin: `git@github.com:buicongnguyen/Choice_of_life_3D.git`. Pushing to `main` runs the

@@ -1,9 +1,12 @@
 import "./style.css";
 import "./conversation.css";
+import "./features.css";
 import { World, type Place } from "./world";
 import { graphicsQuality, type GraphicsQuality } from "./graphics";
 import { KiteGame } from "./kite-game";
 import { chapters, people, text, kiteColours, resolveWho, personName, type Moment, type KiteGrade } from "./content";
+import { u, pickLang, lang, type Lang, type UIKey } from "./i18n";
+import { applyOverlay, type Overlay } from "./localize";
 import {
   SAVE_KEY,
   LEGACY_SAVE_KEY,
@@ -23,16 +26,44 @@ import {
   type Identity,
   type Life,
 } from "./core";
-import { activityUI, briefingUI, endingUI, esc, exploreUI, huntUI, journalUI, momentUI, pauseUI, playUI, responseUI, restartUI, titleUI, chips, statInfo, bondName, type BeatState } from "./ui";
+import { activityUI, albumUI, briefingUI, endingUI, esc, exploreUI, huntUI, journalUI, momentUI, pauseUI, playUI, responseUI, restartUI, titleUI, chips, statInfo, bondName, type BeatState } from "./ui";
 import { beats, wordCount } from "./beats";
-import { cue, blip, voicePitch, setAmbience, setEnabled, stopAmbience } from "./audio";
+import { askingMood, replyMood } from "./moods";
+import { cue, blip, voicePitch, setAmbience, setEnabled, stopAmbience, setMusic, setMusicOn } from "./audio";
+import { ALBUM_KEY, emptyAlbum, keepLife, noteChoices, parseAlbum, type Album } from "./album";
+import { isPattern, kiteLook, paintKite, unlocked } from "./kite-art";
+import { canShareFiles, saveCard, shareCard } from "./card";
+import { TOWN_LINES } from "./town";
 import { BONDS, STATS } from "./core";
 import type { Effect } from "./content";
 
 const ui = document.querySelector<HTMLElement>("#ui")!;
 const host = document.querySelector<HTMLElement>("#world")!;
 const announcer = document.querySelector<HTMLElement>("#announcer")!;
-type Panel = "none" | "moment" | "response" | "activity" | "briefing" | "explore" | "journal" | "pause" | "restart";
+type Panel = "none" | "moment" | "response" | "activity" | "briefing" | "explore" | "journal" | "pause" | "restart" | "album";
+
+// ---------------------------------------------------------------------------
+// language first: saves replay their story text, so the words must be in place before
+// anything is read
+// ---------------------------------------------------------------------------
+const SETTINGS_KEY = "choice-of-life-settings";
+let stored: Record<string, unknown> = {};
+try {
+  stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}") ?? {};
+} catch {}
+const LANG_PACKS: Record<Exclude<Lang, "en">, () => Promise<{ default: Overlay }>> = {
+  vi: () => import("./lang/vi"),
+  ko: () => import("./lang/ko"),
+};
+const wanted = pickLang(stored.lang);
+if (wanted !== "en") {
+  try {
+    applyOverlay((await LANG_PACKS[wanted]()).default);
+  } catch (err) {
+    console.error(err);
+  }
+}
+document.documentElement.lang = lang;
 
 // ---------------------------------------------------------------------------
 // persistent state
@@ -72,6 +103,7 @@ let loading = true,
   notice = "",
   firstBriefing = true;
 let sound = false,
+  music = true,
   largeText = false,
   closeups = true,
   pace = "normal",
@@ -79,16 +111,25 @@ let sound = false,
   kiteAssist = false;
 const phone = matchMedia("(pointer: coarse)").matches && Math.min(screen.width, screen.height) <= 900;
 let graphics: GraphicsQuality = graphicsQuality(undefined, phone);
+let album: Album = emptyAlbum();
 try {
-  const stored = JSON.parse(localStorage.getItem("choice-of-life-settings") ?? "{}");
+  album = parseAlbum(localStorage.getItem(ALBUM_KEY));
+} catch {}
+function saveAlbum() {
+  try {
+    localStorage.setItem(ALBUM_KEY, JSON.stringify(album));
+  } catch {}
+}
+try {
   sound = stored.sound === true;
+  music = stored.music !== false;
   largeText = stored.largeText === true;
   closeups = stored.closeups !== false;
   kiteAssist = stored.kiteAssist === true;
-  graphics = graphicsQuality(stored.graphics, phone);
-  pace = ["gentle", "normal", "brisk"].includes(stored.pace) ? stored.pace : "normal";
+  graphics = graphicsQuality(stored.graphics as string | undefined, phone);
+  pace = typeof stored.pace === "string" && ["gentle", "normal", "brisk"].includes(stored.pace) ? stored.pace : "normal";
   reduced = typeof stored.reduced === "boolean" ? stored.reduced : reduced;
-  const draft = stored.setupDraft;
+  const draft = stored.setupDraft as Partial<Identity> | undefined;
   if (!saved && draft && typeof draft.name === "string") identity = { ...identity, ...draft };
 } catch {}
 
@@ -96,7 +137,7 @@ let world: World;
 try {
   world = new World(host, graphics);
 } catch {
-  ui.innerHTML = '<main class="error"><h1>Your browser could not open the 3D world.</h1><p>Try an up-to-date browser with hardware acceleration enabled.</p><button onclick="location.reload()">Try again</button></main>';
+  ui.innerHTML = `<main class="error"><h1>${u("cover.webgl")}</h1><p>${u("cover.webglHelp")}</p><button onclick="location.reload()">${u("title.retry")}</button></main>`;
   throw new Error("WebGL unavailable");
 }
 
@@ -105,10 +146,11 @@ try {
 // ---------------------------------------------------------------------------
 function prefs(extra: Record<string, unknown> = {}) {
   try {
-    localStorage.setItem("choice-of-life-settings", JSON.stringify({ sound, reduced, pace, largeText, closeups, graphics, kiteAssist, ...extra }));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ sound, music, reduced, pace, largeText, closeups, graphics, kiteAssist, lang, ...extra }));
   } catch {}
   world.reducedMotion = reduced;
   setEnabled(sound);
+  setMusicOn(music);
   world.speed = pace === "gentle" ? 2.3 : pace === "normal" ? 2.9 : 3.6;
   document.body.classList.toggle("reduced", reduced);
   document.body.classList.toggle("large-text", largeText);
@@ -116,7 +158,7 @@ function prefs(extra: Record<string, unknown> = {}) {
 }
 prefs();
 
-const saveText = () => (storageIssue ? "Saving unavailable · keep this tab open" : "● Saved");
+const saveText = () => (storageIssue ? u("hud.saveUnavailable") : u("hud.saved"));
 function save(updatePosition = true) {
   if (mode === "title") return;
   if (updatePosition && !loading) state.position = { x: world.playerPosition.x, z: world.playerPosition.z };
@@ -127,6 +169,7 @@ function save(updatePosition = true) {
   } catch {
     storageIssue = true;
   }
+  if (noteChoices(album, state)) saveAlbum();
   const el = ui.querySelector("#save-status");
   if (el) el.textContent = saveText();
 }
@@ -177,9 +220,10 @@ function panelUI() {
   if (panel === "activity") return activityUI(state, { active: !!kite, assist: kiteAssist });
   if (panel === "briefing") return briefingUI(state, firstBriefing && state.chapter === 0, beat, briefingReopened);
   if (panel === "explore") return exploreUI(world.places());
-  if (panel === "journal") return journalUI(state, journalTab);
-  if (panel === "pause") return pauseUI({ storage: storageIssue, graphics, largeText, reduced, sound, closeups });
+  if (panel === "journal") return journalUI(state, journalTab, album);
+  if (panel === "pause") return pauseUI({ storage: storageIssue, graphics, largeText, reduced, sound, music, closeups, lang });
   if (panel === "restart") return restartUI();
+  if (panel === "album") return albumUI(album);
   return "";
 }
 
@@ -193,12 +237,12 @@ function render(focus = false) {
   document.body.dataset.panel = panel;
   const screen =
     mode === "title"
-      ? titleUI({ saved, identity, loading, loadError, legacy, invalid: invalidSave, storage: storageIssue, pace, graphics, sound, reduced, makeOpen })
+      ? titleUI({ saved, identity, loading, loadError, legacy, invalid: invalidSave, storage: storageIssue, pace, graphics, sound, reduced, makeOpen, lang, album: album.lives.length })
       : mode === "ending"
-        ? endingUI(state)
+        ? endingUI(state, { canShare: canShareFiles(), album: album.lives.length > 0 })
         : playUI(state, { hunt: huntUI(state), notice, saveStatus: saveText() });
-  const loadingCover = mode === "play" && loading ? '<div class="cover" role="status"><span class="spinner"></span>Turning the page…</div>' : "";
-  const errorCover = mode === "play" && loadError ? `<div class="cover"><p>${esc(loadError)}</p><button class="primary" data-action="retry">Try again</button></div>` : "";
+  const loadingCover = mode === "play" && loading ? `<div class="cover" role="status"><span class="spinner"></span>${u("cover.loading")}</div>` : "";
+  const errorCover = mode === "play" && loadError ? `<div class="cover"><p>${esc(loadError)}</p><button class="primary" data-action="retry">${u("title.retry")}</button></div>` : "";
   ui.innerHTML = `<div class="screen" ${panel !== "none" ? "inert" : ""}>${screen}</div>${panelUI()}${loadingCover}${errorCover}`;
   if (notice && mode === "play") ui.querySelector("#toast")?.classList.add("show");
   world.active = mode === "play" && panel === "none" && !loading && !loadError && !document.hidden;
@@ -206,10 +250,12 @@ function render(focus = false) {
   padPointer = null;
   world.focus(closeups && ["moment", "response", "activity"].includes(panel) ? focusId : null);
   world.hideMarkers = panel === "briefing";
+  if (panel === "none") world.expression(null);
   layoutWorld();
   if (mode === "play") nearby(world.nearest());
   if (panel === "activity") mountKite();
   else unmountKite();
+  world.updateKite(state);
   if (focus || opening || closing || focusedAction) {
     const action = closing ? returnFocus : !focus && !opening ? focusedAction : undefined;
     const same = action && focusedValue && action === focusedAction ? `[data-value="${CSS.escape(focusedValue)}"]` : "";
@@ -339,6 +385,7 @@ function bubble(who: string, html: string, ms = 4800) {
   follow();
 }
 function ambience() {
+  setMusic(!sound ? null : mode === "play" ? state.chapter : mode === "title" ? "title" : "end");
   if (!sound) return stopAmbience();
   if (mode === "play") setAmbience(chapterOf(state).env, chapterOf(state).scene);
   else if (mode === "title") setAmbience("festival", "pier");
@@ -357,8 +404,8 @@ function nearby(place?: Place) {
   button.disabled = !place;
   const label = button.querySelector("#interact-label");
   if (!label) return;
-  if (!place) label.textContent = "Look around";
-  else if (place.kind === "person") label.textContent = place.who === "you" ? "Fly the last kite" : place.status === "guest" ? `Meet ${place.label}` : `Talk to ${place.label}`;
+  if (!place) label.textContent = u("hud.lookAround");
+  else if (place.kind === "person") label.textContent = place.who === "you" ? u("act.flyLast") : place.status === "guest" ? u("act.meet", { name: place.label }) : u("act.talk", { name: place.label });
   else label.textContent = place.label;
 }
 
@@ -384,8 +431,13 @@ function mountKite() {
   const canvas = ui.querySelector<HTMLCanvasElement>("#kite-canvas");
   if (!canvas || kite) return;
   const a = chapterOf(state).activity;
+  const look = kiteLook(state);
+  const face = document.createElement("canvas");
+  face.width = face.height = 128;
+  paintKite(face.getContext("2d")!, 128, look.pattern, look.main, look.trim);
   kite = new KiteGame(canvas, {
     colour: `#${kiteColours[state.facts.kite ?? "red"].hex}`,
+    face,
     wind: a.wind ?? 1,
     assist: kiteAssist,
     reduced,
@@ -393,7 +445,7 @@ function mountKite() {
       const t = ui.querySelector("#kite-time"),
         s = ui.querySelector("#kite-score");
       if (t) t.textContent = `${Math.ceil(p.left)}s`;
-      if (s) s.textContent = `In the band: ${Math.round(p.score * 100)}%`;
+      if (s) s.textContent = u("actv.inBand", { n: Math.round(p.score * 100) });
     },
     onDone: (g) => finishKite(g),
   });
@@ -424,6 +476,7 @@ function openMoment(m: Moment, placeId: string) {
   const ctx = m.context?.(state);
   setBeats([...textBeats(text(m.prompt, state)), ...(ctx ? [{ text: ctx, memory: true }] : [])]);
   cue();
+  world.expression(placeId, askingMood(m.id));
   render(true);
 }
 
@@ -439,7 +492,7 @@ function interact(place: Place) {
     if (main) return openMoment(main, place.id);
     if (guests.includes(who) && !l.meetings.includes(who)) {
       perform(`meet:${who}`);
-      response = { title: personName(who, l), text: people[who].meet ?? people[who].bark(l), effect: {}, note: mainDone(l) ? "Friendship is a good beginning, whatever you decided on the roof." : "Go back to Rowan whenever you're ready to talk about it.", who };
+      response = { title: personName(who, l), text: people[who].meet ?? people[who].bark(l), effect: {}, note: mainDone(l) ? u("note.guestAfter") : u("note.guestBefore"), who };
       focusId = place.id;
       panel = "response";
       setBeats(textBeats(response.text));
@@ -450,8 +503,8 @@ function interact(place: Place) {
     if (side) return openMoment(side, place.id);
     const waiting = mine.find((m) => m.kind === "side" && !Object.hasOwn(l.done, m.id));
     if (waiting && freeTime(l) === 0) {
-      bubble(who, "👋 <small>Another time?</small>", 3000);
-      toast("You've no free time left in this chapter.");
+      bubble(who, u("toast.anotherTime"), 3000);
+      toast(u("toast.noTime"));
       return;
     }
     bubble(who, esc(people[who]?.bark(l) ?? ""));
@@ -471,6 +524,7 @@ function interact(place: Place) {
       mode = "ending";
       panel = "none";
       save(false);
+      if (keepLife(album, state)) saveAlbum();
       render(true);
       ambience();
       return;
@@ -500,7 +554,7 @@ function collect(place: Place) {
       activityResult();
       return;
     }
-    toast(`<b>Found: ${esc(item.name)}</b><br><small>${esc(item.line)}</small>`, 3600);
+    toast(`<b>${u("toast.found", { name: esc(item.name) })}</b><br><small>${esc(item.line)}</small>`, 3600);
     refreshHud();
   }
 }
@@ -508,7 +562,7 @@ function collect(place: Place) {
 function activityResult() {
   const m = state.memories.at(-1)!;
   const a = chapterOf(state).activity;
-  response = { title: a.keepsake, text: m.text, effect: m.effect, note: "A new keepsake is in your journal.", who: undefined };
+  response = { title: a.keepsake, text: m.text, effect: m.effect, note: u("note.keepsake"), who: undefined };
   panel = "response";
   setBeats(textBeats(response.text));
   cue("done");
@@ -528,22 +582,27 @@ function choose(index: number) {
     const note =
       m.kind === "main"
         ? state.chapter === chapters.length - 1
-          ? "Walk to the golden gate when you're ready to see your story."
+          ? u("note.lastGate")
           : free > 0 && chapterOf(state).free < 50
-            ? `The golden gate is open. You still have ${free} hour${free === 1 ? "" : "s"} of free time.`
-            : "The golden gate is open."
+            ? free === 1
+              ? u("note.gateFree1")
+              : u("note.gateFree", { n: free })
+            : u("note.gate")
         : chapterOf(state).free > 50
-          ? "There's time today for everyone who came."
+          ? u("note.everyone")
           : free > 0
-          ? `${free} hour${free === 1 ? "" : "s"} of free time left.`
-          : mainDone(state)
-            ? "That was the last of your free time. The golden gate is open."
-            : "That was the last of your free time. The main story is still waiting.";
+            ? free === 1
+              ? u("note.hourLeft")
+              : u("note.hoursLeft", { n: free })
+            : mainDone(state)
+              ? u("note.lastHourGate")
+              : u("note.lastHourMain");
     response = { title: text(m.title, before), text: mem.detail, effect: mem.effect, note, who: m.who };
     panel = "response";
     setBeats(textBeats(response.text));
     cue("choice");
     if (m.id === "c12.last" && state.facts.final === "free") world.releaseKite();
+    world.expression(focusId, replyMood(mem.effect));
     render(true);
     world.acknowledge();
     popRewards(mem.effect);
@@ -560,14 +619,17 @@ async function showChapter() {
     await world.show(state);
     loading = false;
     mode = state.complete ? "ending" : "play";
-    if (state.complete) panel = "none";
+    if (state.complete) {
+      panel = "none";
+      if (keepLife(album, state)) saveAlbum();
+    }
     else if (panel === "none") openBriefing();
     render(true);
     save();
     ambience();
   } catch (err) {
     loading = false;
-    loadError = "This chapter could not load. Your life is safe — try again.";
+    loadError = u("cover.chapterError");
     console.error(err);
     render();
   }
@@ -591,6 +653,7 @@ world.onInteract = interact;
 world.onCollect = collect;
 world.onNearby = nearby;
 world.onPosition = () => save();
+world.onChatter = (who) => bubble(who, esc(u(`town.${Math.floor(Math.random() * TOWN_LINES)}` as UIKey)), 3600);
 
 ui.addEventListener("click", async (event) => {
   const target = (event.target as HTMLElement).closest<HTMLElement>("[data-action]");
@@ -699,7 +762,7 @@ ui.addEventListener("click", async (event) => {
       panel = "none";
       render(true);
       ambience();
-      void world.showTitle(identity);
+      void world.showTitle(identity, saved ? kiteLook(saved) : undefined);
       break;
     case "choose":
       choose(Number(target.dataset.index));
@@ -711,7 +774,7 @@ ui.addEventListener("click", async (event) => {
         if (a.kind === "hunt") {
           panel = "none";
           render();
-          toast(`<b>${esc(text(a.title, state))}</b> — follow the golden beams.`);
+          toast(u("toast.follow", { title: `<b>${esc(text(a.title, state))}</b>` }));
         } else render(true);
       }
       break;
@@ -737,7 +800,56 @@ ui.addEventListener("click", async (event) => {
       const id = target.dataset.place!;
       panel = "none";
       render();
-      if (!world.go(id)) toast("That path is blocked. Try walking around.");
+      if (!world.go(id)) toast(u("toast.blocked"));
+      break;
+    }
+    case "music":
+      music = !music;
+      prefs();
+      ambience();
+      render();
+      break;
+    case "album":
+      panel = "album";
+      render(true);
+      break;
+    case "album-clear":
+      if (confirm(u("album.clearConfirm"))) {
+        album = emptyAlbum();
+        saveAlbum();
+        panel = "none";
+        render(true);
+      }
+      break;
+    case "kite-pattern": {
+      const p = target.dataset.value ?? "";
+      if (isPattern(p) && unlocked(state, p) && state.style.pattern !== p) {
+        state = { ...state, style: { ...state.style, pattern: p } };
+        cue("find");
+        save(false);
+        render();
+      }
+      break;
+    }
+    case "kite-trim": {
+      const t = Number(target.dataset.value);
+      if (Number.isInteger(t) && t >= 0 && t < 6 && state.style.trim !== t) {
+        state = { ...state, style: { ...state.style, trim: t } };
+        cue();
+        save(false);
+        render();
+      }
+      break;
+    }
+    case "card-save":
+    case "card-share": {
+      busy = true;
+      try {
+        const ok = action === "card-save" ? await saveCard(state) : await shareCard(state);
+        if (ok) cue("done");
+      } finally {
+        busy = false;
+      }
       break;
     }
   }
@@ -772,6 +884,13 @@ ui.addEventListener("change", (event) => {
   if (input.name === "pace") {
     pace = input.value;
     prefs();
+  }
+  if (input.name === "lang") {
+    const next = pickLang(input.value);
+    if (next === lang) return;
+    save();
+    prefs({ lang: next, setupDraft: mode === "title" ? identity : undefined });
+    location.reload();
   }
 });
 // Remember whether "Make it yours" is open so re-rendering the title never collapses it.
@@ -822,6 +941,12 @@ window.addEventListener("keydown", (event) => {
       event.preventDefault();
       first?.focus();
     }
+    return;
+  }
+  if (event.key === "Escape" && mode !== "play" && panel !== "none") {
+    event.preventDefault();
+    panel = "none";
+    render(true);
     return;
   }
   if (event.key === "Escape" && mode === "play") {
@@ -890,14 +1015,14 @@ async function boot() {
   render();
   try {
     await world.init();
-    await world.showTitle(identity);
+    await world.showTitle(identity, saved ? kiteLook(saved) : undefined);
     ready = true;
     loading = false;
     render();
     ambience();
   } catch (err) {
     loading = false;
-    loadError = "Kitehaven could not load. Check your connection and try again.";
+    loadError = u("cover.bootError");
     console.error(err);
     render();
   }
@@ -922,6 +1047,9 @@ Object.defineProperty(window, "lifeDiagnostics", {
     bonds: { ...state.bonds },
     stats: { ...state.stats },
     moment: activeMoment?.id ?? null,
+    lang,
+    style: { ...state.style },
+    album: { lives: album.lives.length, endings: [...new Set(album.lives.map((x) => x.ending))], choices: Object.keys(album.choices).length },
     render: world.diagnostics(),
   }),
 });

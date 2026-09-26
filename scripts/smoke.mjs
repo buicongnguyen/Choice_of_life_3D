@@ -49,7 +49,10 @@ async function open({ viewport = { width: 1280, height: 800 }, save, mobile = fa
         localStorage.setItem(key, save);
         sessionStorage.setItem("seeded", "1");
       }
-      if (settings) localStorage.setItem("choice-of-life-settings", settings);
+      if (settings && !sessionStorage.getItem("settings-seeded")) {
+        localStorage.setItem("choice-of-life-settings", settings);
+        sessionStorage.setItem("settings-seeded", "1");
+      }
     },
     { key: core.SAVE_KEY, save: save ? core.serialise(save) : null, settings: settings ? JSON.stringify(settings) : null },
   );
@@ -267,6 +270,147 @@ async function continueSaved(page) {
   assert.ok(box.y >= 0 && box.y + box.height <= 844 && box.x >= 0 && box.x + box.width <= 390, "dialog fits the phone");
   await page.screenshot({ path: "docs/captures/smoke-phone-dialog.png" });
   check("phone: light graphics, touch pad, tap-through beats, the dialog fits a 390×844 screen");
+  await page.close();
+}
+
+// ---------------------------------------------------------------------------
+// 5. Kitehaven 1.2: the kite workshop, paths, the living town, the album, languages
+// ---------------------------------------------------------------------------
+function lifeWithActivities(chapter) {
+  let l = core.newLife(identity);
+  const go = (a) => {
+    const n = core.act(l, a);
+    if (n === l) throw new Error(`refused ${a}`);
+    l = n;
+  };
+  for (let c = 0; c < chapter; c++) {
+    for (const g of core.chapterOf(l).guests ?? []) go(`meet:${g}`);
+    const a = core.chapterOf(l).activity;
+    if (core.canStartActivity(l)) {
+      go("start");
+      if (a.kind === "hunt") a.items.forEach((_, i) => go(`hunt:${i}`));
+      else if (a.kind === "plan") {
+        for (let k = 0; k < 3; k++) go(`plan:${a.blocks[0].id}`);
+        go("commit");
+      } else go("kite:soar");
+    }
+    const main = core.mainMoment(l);
+    const open = core.visibleOptions(l, main).filter(([o]) => core.optionOpen(l, o));
+    go(core.talkAction(main.id, open[0][1]));
+    go("next");
+  }
+  return l;
+}
+{
+  // chapter 3, the schoolyard: autumn, townsfolk, your kite over the playground
+  const page = await open({ save: lifeWithActivities(2) });
+  await continueSaved(page);
+  let d = await diag(page);
+  assert.ok(d.render.walkers >= 2, `townsfolk stroll through the schoolyard (${d.render.walkers})`);
+  assert.ok(d.render.skyKite?.startsWith("plain:"), `your kite flies over an outdoor chapter (${d.render.skyKite})`);
+  assert.ok(await page.locator(".chapter-chip .season.s-autumn").isVisible(), "the HUD shows the season");
+  const before = await page.evaluate(() => window.lifeDiagnostics.render.walkers);
+  await page.waitForTimeout(2500);
+  check("the living town: walkers, the season chip and your kite in the sky");
+
+  await page.locator('[data-action="journal"]').click();
+  await panel(page, "journal");
+  await page.locator('[data-tab="kite"]').click();
+  assert.ok(await page.locator('[data-action="kite-pattern"][data-value="stripes"]:not(:disabled)').count(), "first steps earned stripes");
+  assert.ok(await page.locator('[data-action="kite-pattern"][data-value="checks"]:disabled').count(), "the rooftop pattern is still locked");
+  await page.locator('[data-action="kite-pattern"][data-value="waves"]').click();
+  await page.locator('[data-action="kite-trim"][data-value="1"]').click();
+  d = await diag(page);
+  assert.deepEqual(d.style, { pattern: "waves", trim: 1 });
+  assert.ok(d.render.skyKite.startsWith("waves:"), "the sky kite is repainted");
+  await page.screenshot({ path: "docs/captures/smoke-kite-workshop.png" });
+  await page.locator('[data-tab="paths"]').click();
+  assert.equal(await page.locator(".path-ch.reached").count(), 2, "two big choices so far");
+  assert.equal(await page.locator(".path-ch .st-chosen").count(), 2);
+  await page.screenshot({ path: "docs/captures/smoke-paths.png" });
+  await closePanel(page);
+  await page.reload();
+  await ready(page);
+  assert.deepEqual((await diag(page)).style, { pattern: "waves", trim: 1 }, "the design is saved");
+  check("kite workshop: earned patterns, a second colour, saved; paths show the big choices");
+  void before;
+  await page.close();
+}
+{
+  // the last festival: fireworks, the ending, the album and the picture card
+  const l = lifeTo(11);
+  const page = await open({ save: l });
+  await continueSaved(page);
+  assert.ok((await diag(page)).render.fireworks, "fireworks over the last festival");
+  await travel(page, "self");
+  await panel(page, "moment");
+  await skipBeats(page);
+  await page.locator('[data-action="choose"]').first().click();
+  await panel(page, "response");
+  await closePanel(page);
+  await travel(page, "exit");
+  await page.waitForFunction(() => window.lifeDiagnostics.mode === "ending");
+  let d = await diag(page);
+  assert.equal(d.album.lives, 1, "the finished life is kept in the album");
+  const download = page.waitForEvent("download");
+  await page.locator('[data-action="card-save"]').click();
+  const file = await download;
+  const path = await file.path();
+  const { statSync } = await import("node:fs");
+  assert.ok(statSync(path).size > 60000, "the picture card is a real image");
+  await file.saveAs("docs/captures/smoke-life-card.png");
+  await page.locator('[data-action="album"]').click();
+  await panel(page, "album");
+  assert.equal(await page.locator(".ending-card.got").count(), 1);
+  assert.equal(await page.locator(".lives li").count(), 1);
+  await page.screenshot({ path: "docs/captures/smoke-album.png" });
+  await page.keyboard.press("Escape");
+  await panel(page, "none");
+  await page.locator('[data-action="title"]').click();
+  await page.waitForFunction(() => window.lifeDiagnostics.mode === "title");
+  assert.ok(await page.locator('.title-foot [data-action="album"]').isVisible(), "the album is on the title screen");
+  check("fireworks, the ending, the picture card and the album of lives");
+  await page.close();
+}
+for (const [code, pattern, chapterTitle] of [
+  ["vi", /[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/i, /[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/i],
+  ["ko", /[가-힣]/, /[가-힣]/],
+]) {
+  const page = await open({ save: lifeTo(1), settings: { lang: code } });
+  assert.equal(await page.evaluate(() => document.documentElement.lang), code);
+  assert.match(await page.locator(".title-card").innerText(), pattern, `${code}: the title screen is translated`);
+  const font = await page.evaluate(() => getComputedStyle(document.body).fontFamily);
+  assert.ok(code === "vi" ? /Be Vietnam Pro/.test(font) : /Malgun|Gothic|Noto Sans KR/.test(font), `${code}: font stack ${font}`);
+  await page.locator('[data-action="continue"]').click();
+  await ready(page);
+  await panel(page, "briefing");
+  assert.match(await page.locator(".cinema h2").innerText(), chapterTitle, `${code}: the chapter card is translated`);
+  await closePanel(page);
+  await travel(page, "person:rowan");
+  await panel(page, "moment");
+  await skipBeats(page);
+  const option = await page.locator('[data-action="choose"]').first().innerText();
+  assert.match(option, pattern, `${code}: choices are translated`);
+  await page.screenshot({ path: `docs/captures/smoke-${code}.png` });
+  await page.locator('[data-action="choose"]').first().click();
+  await panel(page, "response");
+  await closePanel(page);
+  await page.locator('[data-action="journal"]').click();
+  await panel(page, "journal");
+  assert.match(await page.locator(".journal").innerText(), pattern);
+  await closePanel(page);
+  // switch language from the pause menu: the page reloads in the new language, same life
+  const logBefore = (await diag(page)).done;
+  await page.keyboard.press("Escape");
+  await panel(page, "pause");
+  const next = code === "vi" ? "ko" : "en";
+  await Promise.all([page.waitForNavigation(), page.locator('select[name="lang"]').selectOption(next)]);
+  await ready(page);
+  assert.equal(await page.evaluate(() => document.documentElement.lang), next);
+  await page.locator('[data-action="continue"]').click();
+  await ready(page);
+  assert.equal((await diag(page)).done, logBefore, "the same life continues in another language");
+  check(`${code === "vi" ? "Vietnamese" : "Korean"}: title, chapter card, choices and journal translated; switching language keeps the life`);
   await page.close();
 }
 

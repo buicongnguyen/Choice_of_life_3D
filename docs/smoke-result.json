@@ -1,5 +1,5 @@
 {
-  "at": "2026-09-26T04:57:54.146Z",
+  "at": "2026-09-26T06:30:30.553Z",
   "base": "http://127.0.0.1:4197/",
   "checks": [
     "title → customise → begin a new life → chapter card",
@@ -14,7 +14,12 @@
     "the planner: close and reopen mid-plan, three blocks, undo, commit",
     "the last kite, the golden gate and a full ending",
     "a finished life reopens on its ending, not on the last chapter card",
-    "phone: light graphics by default, touch pad, the dialog fits a 390×844 screen"
+    "phone: light graphics, touch pad, tap-through beats, the dialog fits a 390×844 screen",
+    "the living town: walkers, the season chip and your kite in the sky",
+    "kite workshop: earned patterns, a second colour, saved; paths show the big choices",
+    "fireworks, the ending, the picture card and the album of lives",
+    "Vietnamese: title, chapter card, choices and journal translated; switching language keeps the life",
+    "Korean: title, chapter card, choices and journal translated; switching language keeps the life"
   ],
   "errors": []
 }

@@ -9,12 +9,16 @@ import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { HorizontalTiltShiftShader } from "three/addons/shaders/HorizontalTiltShiftShader.js";
 import { VerticalTiltShiftShader } from "three/addons/shaders/VerticalTiltShiftShader.js";
 import { VignetteShader } from "three/addons/shaders/VignetteShader.js";
-import { portraits } from "./portraits";
+import { portraits, speaking } from "./portraits";
 import { Stage } from "./lighting";
 import { modelURL } from "./asset-url";
 import { graphicsProfile, type GraphicsQuality } from "./graphics";
 import { chapters, people, kiteColours, workplaceVariant, pierState, personName, interest, type Look, type Env } from "./content";
-import { castOf, momentsOf, canTalk, record, canLeave, canStartActivity, HAIR_STYLES, SKINS, COLOURS, SPAWN, type Life, type Identity } from "./core";
+import { castOf, momentsOf, canTalk, record, canLeave, canStartActivity, mainDone, HAIR_STYLES, SKINS, COLOURS, SPAWN, type Life, type Identity } from "./core";
+import { u } from "./i18n";
+import { buildKite, kiteLook, lookOf, type KiteLook } from "./kite-art";
+import { FIREWORKS, TOWN_TOPS, WALKERS, seasonOf, type Season } from "./town";
+import type { Mood } from "./moods";
 import { activeColliders, clearSegment, findPath, free, recoverPosition, withinPickup, approach, navigation, type Collider, type SceneLayout } from "./navigation";
 
 export type PlaceKind = "person" | "discovery" | "activity" | "hunt" | "exit";
@@ -27,6 +31,13 @@ type Actor = {
   eyes?: T.Object3D;
   mouthOpen?: T.Object3D;
   mouthSmile?: T.Object3D;
+  eyesHappy?: T.Object3D;
+  mouthSad?: T.Object3D;
+  brows: (T.Object3D | undefined)[];
+  browY: number[];
+  mood: Mood;
+  /** 0..1 blend of the brow pose towards the current mood. */
+  moodBlend: number;
   limbs: (T.Object3D | undefined)[];
   facing: number;
   blink: number;
@@ -37,11 +48,45 @@ type Actor = {
   bodyY: number;
   height: number;
 };
+type Walker = Actor & { route: { x: number; z: number }[]; wait: number; gait: number; rnd: () => number };
+type Fireworks = { obj: T.Points; pos: Float32Array; col: Float32Array; base: Float32Array; vel: Float32Array; life: Float32Array; max: Float32Array; next: number; cursor: number };
 type Point = { place: Place; root: T.Group; marker?: T.Sprite; label?: T.Sprite; spin?: T.Object3D; ring?: T.Mesh };
 
 const DIR = new T.Vector3(10, 14, 18).normalize();
+/** A soft round spark for fireworks (drawn once). */
+let spark: T.CanvasTexture | undefined;
+function sparkTexture() {
+  if (!spark) {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const g = c.getContext("2d")!;
+    const r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    r.addColorStop(0, "rgba(255,255,255,1)");
+    r.addColorStop(0.25, "rgba(255,255,255,0.85)");
+    r.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = r;
+    g.fillRect(0, 0, 64, 64);
+    spark = new T.CanvasTexture(c);
+  }
+  return spark;
+}
+/** The page's font stack (it changes with the language), for text drawn on canvases. */
+const canvasFont = () => getComputedStyle(document.documentElement).getPropertyValue("--sans").trim() || "system-ui, sans-serif";
+/** The camera's right and "away" directions on the ground (the view direction never rotates). */
+const AWAY = new T.Vector3(-DIR.x, 0, -DIR.z).normalize();
+const RIGHT = new T.Vector3(-AWAY.z, 0, AWAY.x);
 const STAT_COLOURS = { health: 0xff6a6a, joy: 0xffc234, savings: 0x2ed3b0 } as const;
 const RECOLOUR = ["Skin", "Hair", "Top", "Bottom", "Shoes", "Accent", "Kite"];
+/** Brow pose per mood: tilt (+ raises the inner ends) and lift (fraction of height). */
+const BROWS: Record<Mood, { tilt: number; lift: number }> = {
+  neutral: { tilt: 0, lift: 0 },
+  happy: { tilt: -0.08, lift: 0.5 },
+  sad: { tilt: 0.38, lift: 0.2 },
+  surprised: { tilt: 0, lift: 1.4 },
+  worried: { tilt: 0.3, lift: 0.6 },
+  cross: { tilt: -0.42, lift: -0.4 },
+};
+const restMouth = (m: Mood) => (m === "sad" || m === "worried" || m === "cross" ? "sad" : "smile");
 
 export function playerLook(id: Identity, chapter: number, l?: Life): Look {
   const skin = SKINS[id.skin] ?? SKINS[0];
@@ -113,6 +158,9 @@ export class World {
   private titleMode = false;
   private titleKite?: T.Object3D;
   private release?: T.Object3D;
+  private skyKite?: { obj: T.Group; key: string };
+  private walkers: Walker[] = [];
+  private fireworks?: Fireworks;
   active = false;
   /** Quest markers and name labels step aside during the chapter's opening shot. */
   hideMarkers = false;
@@ -122,6 +170,8 @@ export class World {
   onCollect: (place: Place) => void = () => {};
   onNearby: (place: Place | undefined) => void = () => {};
   onPosition: () => void = () => {};
+  /** Someone strolling through town was clicked: they say something small. */
+  onChatter: (who: string) => void = () => {};
 
   constructor(
     private host: HTMLElement,
@@ -263,7 +313,7 @@ export class World {
       // Only the group nodes toggle (their meshes are named Hair_bob_Hair etc. and inherit visibility).
       if (/^Hair_[a-z]+$/.test(o.name)) o.visible = o.name === `Hair_${look.style}`;
       if (/^Acc_[a-z]+$/.test(o.name)) o.visible = look.acc.includes(o.name.slice(4));
-      if (o.name === "Mouth_open") o.visible = false;
+      if (o.name === "Mouth_open" || o.name === "Mouth_sad" || o.name === "Eyes_happy") o.visible = false;
       if (o instanceof T.Mesh) {
         const m = o.material as T.MeshStandardMaterial;
         if (RECOLOUR.includes(m.name)) {
@@ -289,6 +339,12 @@ export class World {
       eyes: get("Eyes"),
       mouthOpen: get("Mouth_open"),
       mouthSmile: get("Mouth_smile"),
+      eyesHappy: get("Eyes_happy"),
+      mouthSad: get("Mouth_sad"),
+      brows: [get("BrowL"), get("BrowR")],
+      browY: [get("BrowL")?.position.y ?? 0, get("BrowR")?.position.y ?? 0],
+      mood: "neutral",
+      moodBlend: 0,
       limbs: ["ArmL", "ArmR", "LegL", "LegR"].map(get),
       facing: 0,
       blink: 1 + Math.random() * 3,
@@ -338,7 +394,7 @@ export class World {
     const kinds = new Set([pLook.kind, ...looks.map((l) => l.kind)]);
     const [scenery, props, harbour] = await Promise.all([this.load(chapter.scene), this.load("props"), layout.backdrop ? this.load("harbour") : Promise.resolve(undefined), ...[...kinds].map((k) => this.load(k))]);
     const bodies: Record<string, T.Group> = {};
-    for (const k of kinds) bodies[k] = await this.load(k);
+    for (const k of new Set([...kinds, ...(WALKERS[chapter.scene] ?? [])])) bodies[k] = await this.load(k);
     if (ticket !== this.generation) return;
     this.reset();
     this.state = state;
@@ -383,7 +439,11 @@ export class World {
       this.actors.push(actor);
     });
     this.buildPoints(props);
-    this.addWeather(chapter.env);
+    this.addWalkers(state, chapter.scene, bodies);
+    this.addWeather(chapter.env, seasonOf(state.chapter), !layout.interior);
+    this.skyKite = undefined;
+    if (!layout.interior && state.chapter >= 1 && state.chapter < chapters.length - 1 && chapter.env !== "storm") this.updateKite(state);
+    if (FIREWORKS.has(state.chapter) && !this.reducedMotion) this.addFireworks();
     this.camTarget.copy(this.followTarget());
     this.intro = this.reducedMotion ? 0 : 1;
     this.resize();
@@ -395,7 +455,7 @@ export class World {
   }
 
   /** Title screen: the festival pier with your avatar and a kite in the sky. */
-  async showTitle(identity: Identity) {
+  async showTitle(identity: Identity, look?: KiteLook) {
     const ticket = ++this.generation;
     const [scenery, props, adult, harbour] = await Promise.all([this.load("pier"), this.load("props"), this.load("adult"), this.load("harbour")]);
     if (ticket !== this.generation) return;
@@ -413,15 +473,12 @@ export class World {
     this.player.root.position.set(-1.2, 0, 3.3);
     this.player.root.rotation.y = 0.55;
     this.cast.add(this.player.root);
-    const kite = props.getObjectByName("Prop_kite");
-    if (kite) {
-      const k = this.clone(kite);
-      this.recolourKite(k, this.kiteHex());
-      k.scale.setScalar(2.2);
-      k.position.set(-4.2, 5.4, 0.2);
-      this.fx.add(k);
-      this.titleKite = k;
-    }
+    void props;
+    const k = buildKite(look ?? lookOf("red", "plain", 0), 1.5);
+    k.position.set(-4.2, 5.4, 0.2);
+    k.rotation.set(-0.25, 0.51, 0, "YXZ");
+    this.fx.add(k);
+    this.titleKite = k;
     this.addWeather("festival");
     this.camTarget.set(-3.4, 1.9, 2.6);
     this.camDist = this.camGoalDist = 12;
@@ -473,6 +530,9 @@ export class World {
     this.conversation = null;
     this.titleKite = undefined;
     this.release = undefined;
+    this.skyKite = undefined;
+    this.walkers = [];
+    this.fireworks = undefined;
     this.target = [];
     this.pending = null;
     this.lastNearby = "";
@@ -519,8 +579,9 @@ export class World {
     this.sceneRoot.add(sea);
   }
 
-  private addWeather(env: Env) {
-    const kind = this.stage.preset.weather;
+  private addWeather(env: Env, season?: Season, outdoor = false) {
+    let kind: string | undefined = this.stage.preset.weather;
+    if (outdoor && season && kind !== "rain" && kind !== "confetti") kind = season === "autumn" ? "leaves" : season === "winter" ? "snow" : season === "spring" ? "petals" : kind;
     if (!kind || this.graphics.low || this.reducedMotion) return;
     if (kind === "rain") {
       const n = 900;
@@ -541,11 +602,20 @@ export class World {
       this.weather = { obj, kind, speeds };
       return;
     }
-    const n = kind === "confetti" ? 260 : kind === "petals" ? 120 : 90;
+    const n = kind === "confetti" ? 260 : kind === "petals" || kind === "leaves" ? 120 : kind === "snow" ? 220 : 90;
     const pos = new Float32Array(n * 3);
     const col = new Float32Array(n * 3);
     const speeds = new Float32Array(n);
-    const palette = kind === "confetti" ? [0xee3b3b, 0xffc234, 0x2f7de1, 0x5fe0b7, 0xff5f8f] : kind === "petals" ? [0xff9fb8, 0xffffff, 0xffd0dc] : [0xffe2a0, 0xfff4cf];
+    const palette =
+      kind === "confetti"
+        ? [0xee3b3b, 0xffc234, 0x2f7de1, 0x5fe0b7, 0xff5f8f]
+        : kind === "petals"
+          ? [0xff9fb8, 0xffffff, 0xffd0dc]
+          : kind === "leaves"
+            ? [0xf0782a, 0xdc4a26, 0xf6b733, 0xb8552a]
+            : kind === "snow"
+              ? [0xffffff, 0xeaf3ff]
+              : [0xffe2a0, 0xfff4cf];
     const c = new T.Color();
     for (let i = 0; i < n; i++) {
       pos.set([(Math.random() - 0.5) * 22, Math.random() * 9, (Math.random() - 0.5) * 16], i * 3);
@@ -556,7 +626,7 @@ export class World {
     const g = new T.BufferGeometry();
     g.setAttribute("position", new T.BufferAttribute(pos, 3));
     g.setAttribute("color", new T.BufferAttribute(col, 3));
-    const mat = new T.PointsMaterial({ size: kind === "motes" ? 0.09 : 0.12, vertexColors: true, transparent: true, opacity: kind === "motes" ? 0.8 : 0.95, depthWrite: false, blending: kind === "motes" ? T.AdditiveBlending : T.NormalBlending });
+    const mat = new T.PointsMaterial({ size: kind === "motes" ? 0.09 : kind === "leaves" ? 0.17 : kind === "snow" ? 0.1 : 0.12, vertexColors: true, transparent: true, opacity: kind === "motes" ? 0.8 : 0.95, depthWrite: false, blending: kind === "motes" ? T.AdditiveBlending : T.NormalBlending });
     const obj = new T.Points(g, mat);
     obj.userData.ownedGeometry = true;
     this.fx.add(obj);
@@ -614,7 +684,7 @@ export class World {
     }
     // the "you" main moment in the final chapter happens at the kite spot
     const selfMain = moments.find((m) => m.who === "you" && canTalk(l, m));
-    if (selfMain) this.addSpot({ id: "self", kind: "person", label: chapter.moments.find((m) => m.who === "you") ? "Fly the last kite" : "", x: layout.anchors.act.x, z: layout.anchors.act.z, index: 0, who: "you", status: "main" }, "kite", 0xffc234, true);
+    if (selfMain) this.addSpot({ id: "self", kind: "person", label: chapter.moments.find((m) => m.who === "you") ? u("act.flyLast") : "", x: layout.anchors.act.x, z: layout.anchors.act.z, index: 0, who: "you", status: "main" }, "kite", 0xffc234, true);
     // discoveries
     chapter.finds.forEach((d, i) => {
       if (l.found.includes(`${l.chapter}:${i}`)) return;
@@ -648,7 +718,7 @@ export class World {
       root.add(gate);
       const ring = this.ringMesh(0xffc234, 0.95);
       root.add(ring);
-      const place: Place = { id: "exit", kind: "exit", label: l.chapter === chapters.length - 1 ? "Your story" : "Next chapter", x: e.x, z: e.z, index: 0 };
+      const place: Place = { id: "exit", kind: "exit", label: l.chapter === chapters.length - 1 ? u("world.story") : u("world.next"), x: e.x, z: e.z, index: 0 };
       const label = this.chip(`${place.label} →`, "#ffc234");
       label.position.y = 3.0;
       root.add(label);
@@ -722,7 +792,7 @@ export class World {
     g.strokeStyle = "#ffffff";
     g.stroke();
     g.fillStyle = color === "#ffc234" || color === "#2ed3b0" ? "#1d2340" : "#ffffff";
-    g.font = "900 72px DM Sans, system-ui, sans-serif";
+    g.font = `900 72px ${canvasFont()}`;
     g.textAlign = "center";
     g.textBaseline = "middle";
     g.fillText(symbol, 64, 66);
@@ -739,7 +809,7 @@ export class World {
     c.width = 512;
     c.height = 104;
     const g = c.getContext("2d")!;
-    g.font = "700 44px DM Sans, system-ui, sans-serif";
+    g.font = `700 44px ${canvasFont()}`;
     const w = Math.min(496, g.measureText(textValue).width + 76);
     const x = (512 - w) / 2;
     g.fillStyle = "rgba(20,24,52,0.3)";
@@ -888,6 +958,8 @@ export class World {
         if (o.userData.place) return o.userData.place;
         const actor = this.actors.find((a) => a.root === o);
         if (actor) return `person:${actor.who}`;
+        const walker = this.walkers.find((a) => a.root === o);
+        if (walker) return `walker:${walker.who}`;
         o = o.parent;
       }
     }
@@ -896,6 +968,17 @@ export class World {
 
   private tap(x: number, y: number) {
     const id = this.pick(x, y);
+    if (id?.startsWith("walker:")) {
+      const w = this.walkers.find((a) => a.who === id.slice(7));
+      if (w) {
+        w.wait = 3.5;
+        w.route = [];
+        w.root.rotation.y = Math.atan2(this.playerPosition.x - w.root.position.x, this.playerPosition.z - w.root.position.z);
+        w.wave = 1.2;
+        this.onChatter(w.who);
+      }
+      return;
+    }
     if (id && this.points.some((p) => p.place.id === id)) {
       this.go(id);
       return;
@@ -984,7 +1067,7 @@ export class World {
 
   /** Screen position (CSS px, relative to the window) of someone's head, for popups and bubbles. */
   screenOf(who: string, above = 0.35): { x: number; y: number } | null {
-    const actor = who === "you" ? this.player : this.actors.find((a) => a.who === who);
+    const actor = who === "you" ? this.player : (this.actors.find((a) => a.who === who) ?? this.walkers.find((a) => a.who === who));
     if (!actor) return null;
     const v = actor.root.position.clone();
     v.y += actor.height + above;
@@ -998,9 +1081,14 @@ export class World {
    * Portraits from the real 3D characters: each head is rendered once per chapter into a
    * corner of the canvas and copied out before the next frame, so no second context is needed.
    */
-  private makePortraits() {
-    portraits.clear();
-    const all = [...this.actors, ...(this.player ? [this.player] : [])];
+  private moodFaces = new Map<string, string>();
+  private makePortraits(only?: Actor) {
+    if (!only) {
+      portraits.clear();
+      this.moodFaces.clear();
+      speaking.who = "";
+    }
+    const all = only ? [only] : [...this.actors, ...(this.player ? [this.player] : [])];
     if (!all.length) return;
     const size = 160;
     const pr = this.renderer.getPixelRatio();
@@ -1014,9 +1102,13 @@ export class World {
     const studio = new T.PointLight(0xfff1e0, 3.2, 4, 1.5);
     this.scene.add(studio);
     this.scene.updateMatrixWorld(true);
+    const people = [...this.actors, ...this.walkers, ...(this.player ? [this.player] : [])];
+    const shown = people.map((p) => p.root.visible);
     for (const a of all) {
       const eyes = a.eyes ?? a.head;
       if (!eyes) continue;
+      // Only the sitter is in the photo (in a conversation, you're standing right in front of them).
+      for (const p of people) p.root.visible = p === a;
       const face = eyes.getWorldPosition(new T.Vector3());
       const fwd = new T.Vector3(Math.sin(a.root.rotation.y), 0, Math.cos(a.root.rotation.y));
       const target = face.clone().addScaledVector(fwd, -0.12).add(new T.Vector3(0, -0.02, 0));
@@ -1031,8 +1123,11 @@ export class World {
       const c = this.renderer.domElement;
       g.clearRect(0, 0, size, size);
       g.drawImage(c, 0, c.height - size * pr, size * pr, size * pr, 0, 0, size, size);
-      portraits.set(a.who, out.toDataURL("image/webp", 0.85));
+      const url = out.toDataURL("image/webp", 0.85);
+      if (only) this.moodFaces.set(`${a.who}@${a.mood}`, url);
+      else portraits.set(a.who, url);
     }
+    people.forEach((p, i) => (p.root.visible = shown[i]));
     this.scene.remove(studio);
     studio.dispose();
     this.renderer.setScissorTest(false);
@@ -1041,6 +1136,57 @@ export class World {
     this.renderer.setViewport(0, 0, w, h);
     this.fx.visible = fxWasVisible;
     this.render();
+  }
+
+  /**
+   * Set the face of whoever stands at a place (or everyone back to neutral). Their dialog
+   * portrait is re-rendered from the 3D head wearing that face, once per mood per chapter.
+   */
+  expression(placeId: string | null, mood: Mood = "neutral") {
+    if (!placeId) {
+      for (const a of this.actors) a.mood = "neutral";
+      speaking.who = "";
+      return;
+    }
+    const p = this.points.find((q) => q.place.id === placeId);
+    const actor = p?.place.who ? this.actors.find((a) => a.who === p.place.who) : undefined;
+    if (!actor) return;
+    if (actor.mood !== mood) {
+      actor.mood = mood;
+      actor.moodBlend = 0;
+    }
+    if (mood === "neutral") {
+      speaking.who = "";
+      return;
+    }
+    const key = `${actor.who}@${mood}`;
+    if (!this.moodFaces.has(key)) {
+      this.poseFace(actor);
+      this.makePortraits(actor);
+    }
+    speaking.who = actor.who;
+    speaking.url = this.moodFaces.get(key) ?? "";
+  }
+
+  /** Put a face straight into its mood (no blend, eyes open, mouth at rest). */
+  private poseFace(a: Actor) {
+    const mood = a.mood;
+    const beam = mood === "happy";
+    if (a.eyes) {
+      a.eyes.visible = !beam;
+      const wide = mood === "surprised" ? 1.22 : 1;
+      a.eyes.scale.set(wide, wide, 1);
+    }
+    if (a.eyesHappy) a.eyesHappy.visible = beam;
+    const pose = BROWS[mood];
+    a.brows.forEach((b, i) => {
+      if (!b) return;
+      b.rotation.z = (i === 0 ? 1 : -1) * pose.tilt;
+      b.position.y = a.browY[i] + pose.lift * a.height * 0.011;
+    });
+    this.mouth(a, mood === "surprised" ? "open" : restMouth(mood));
+    if (a.head) a.head.rotation.set(0, 0, 0);
+    a.moodBlend = 1;
   }
 
   /** Let the person you're talking to react (nod + mouth) after a choice. */
@@ -1053,10 +1199,9 @@ export class World {
   /** The final release: your kite climbs into the sunset. */
   releaseKite() {
     if (!this.state || !this.player) return;
-    const k = this.prop("kite");
-    this.recolourKite(k, this.kiteHex(this.state));
-    k.scale.setScalar(1.6);
-    k.position.copy(this.playerPosition).add(new T.Vector3(0.4, 1.6, -0.4));
+    const k = buildKite(kiteLook(this.state), 1.1);
+    k.rotation.set(-0.3, Math.atan2(DIR.x, DIR.z), 0, "YXZ");
+    k.position.copy(this.playerPosition).add(new T.Vector3(0.4, 1.9, -0.4));
     this.fx.add(k);
     this.release = k;
   }
@@ -1138,8 +1283,8 @@ export class World {
     }
   }
 
-  private animateActor(a: Actor, moving: boolean, t: number, dt: number) {
-    const swing = moving ? Math.sin(this.gait) : 0;
+  private animateActor(a: Actor, moving: boolean, t: number, dt: number, gait = this.gait) {
+    const swing = moving ? Math.sin(gait) : 0;
     const [armL, armR, legL, legR] = a.limbs;
     if (a.baby) {
       if (armL) armL.rotation.x = moving ? swing * 0.5 : 0;
@@ -1153,14 +1298,29 @@ export class World {
       if (armR && a.wave <= 0) armR.rotation.x = swing * 0.5;
     }
     if (a.body) {
-      a.body.position.y = a.bodyY + (moving ? Math.abs(Math.sin(this.gait)) * 0.045 : Math.sin(t * 2.1) * 0.006);
+      a.body.position.y = a.bodyY + (moving ? Math.abs(Math.sin(gait)) * 0.045 : Math.sin(t * 2.1) * 0.006);
       a.body.rotation.x = moving ? 0.06 : 0;
     }
     if (a.head && !this.reducedMotion) a.head.rotation.z = Math.sin(t * 1.3) * 0.03;
-    // blink
+    // blink, and the mood on the face
     a.blink -= dt;
-    if (a.eyes) a.eyes.scale.y = a.blink < 0.12 && a.blink > 0 ? 0.12 : 1;
+    const mood = a.mood;
+    a.moodBlend = Math.min(1, a.moodBlend + dt * 6);
+    const beam = mood === "happy";
+    if (a.eyes) {
+      a.eyes.visible = !beam;
+      const wide = mood === "surprised" ? 1.22 : 1;
+      a.eyes.scale.set(wide, a.blink < 0.12 && a.blink > 0 ? 0.12 : wide, 1);
+    }
+    if (a.eyesHappy) a.eyesHappy.visible = beam;
     if (a.blink <= 0) a.blink = 2.2 + Math.random() * 3.5;
+    const pose = BROWS[mood];
+    a.brows.forEach((b, i) => {
+      if (!b) return;
+      const side = i === 0 ? 1 : -1;
+      b.rotation.z = T.MathUtils.lerp(b.rotation.z, side * pose.tilt, a.moodBlend);
+      b.position.y = T.MathUtils.lerp(b.position.y, a.browY[i] + pose.lift * a.height * 0.011, a.moodBlend);
+    });
     // wave
     if (armR && a.wave > 0) {
       a.wave -= dt;
@@ -1172,14 +1332,18 @@ export class World {
     if (a.talk > 0) {
       a.talk -= dt;
       const open = Math.sin(t * 22) > 0.1 && a.talk > 0.2;
-      if (a.mouthOpen) a.mouthOpen.visible = open;
-      if (a.mouthSmile) a.mouthSmile.visible = !open;
+      this.mouth(a, open ? "open" : restMouth(mood));
       if (a.head) a.head.rotation.x = Math.sin(t * 7) * 0.05;
     } else {
-      if (a.mouthOpen) a.mouthOpen.visible = false;
-      if (a.mouthSmile) a.mouthSmile.visible = true;
-      if (a.head) a.head.rotation.x = 0;
+      this.mouth(a, mood === "surprised" ? "open" : restMouth(mood));
+      if (a.head) a.head.rotation.x = mood === "sad" ? 0.12 : 0;
     }
+  }
+
+  private mouth(a: Actor, shape: "open" | "smile" | "sad") {
+    if (a.mouthOpen) a.mouthOpen.visible = shape === "open";
+    if (a.mouthSmile) a.mouthSmile.visible = shape === "smile" || (shape === "sad" && !a.mouthSad);
+    if (a.mouthSad) a.mouthSad.visible = shape === "sad";
   }
 
   private tick = (ms: number) => {
@@ -1266,8 +1430,8 @@ export class World {
         for (let i = 0; i < this.weather.speeds.length; i++) {
           const k = i * 3;
           const sp = this.weather.speeds[i];
-          arr[k + 1] += (up ? 0.12 : -sp * 0.9) * adt;
-          arr[k] += Math.sin(t * sp + i) * 0.3 * adt;
+          arr[k + 1] += (up ? 0.12 : -sp * (this.weather.kind === "snow" ? 0.45 : 0.9)) * adt;
+          arr[k] += Math.sin(t * sp + i) * (this.weather.kind === "leaves" ? 0.9 : 0.3) * adt;
           if (arr[k + 1] < -0.5 || arr[k + 1] > 9) {
             arr[k] = cx + (Math.random() - 0.5) * 22;
             arr[k + 1] = up ? 0 : 8 + Math.random() * 2;
@@ -1277,6 +1441,7 @@ export class World {
       }
       pos.needsUpdate = true;
     }
+    this.animateTown(t, adt);
     if (this.titleKite && !this.reducedMotion) {
       this.titleKite.rotation.z = Math.sin(t * 0.8) * 0.2;
       this.titleKite.position.y = 5.4 + Math.sin(t * 0.6) * 0.3;
@@ -1313,6 +1478,218 @@ export class World {
     this.resize();
   }
 
+  // -------------------------------------------------------------------------
+  // the living town: your kite in the sky, people strolling by, fireworks
+  // -------------------------------------------------------------------------
+  /** Show (or repaint) your kite over an outdoor chapter; cheap when nothing changed. */
+  updateKite(l: Life) {
+    if (!this.state || this.titleMode) return;
+    const layout = this.layout;
+    const chapter = chapters[this.state.chapter];
+    if (!layout || layout.interior || this.state.chapter < 1 || this.state.chapter >= chapters.length - 1 || chapter.env === "storm") return;
+    const look = kiteLook(l);
+    const key = `${look.pattern}:${look.main}:${look.trim}`;
+    if (this.skyKite?.key === key) return;
+    if (this.skyKite) {
+      this.skyKite.obj.removeFromParent();
+      this.skyKite.obj.traverse((o) => {
+        if (o instanceof T.Mesh) {
+          (o.material as T.Material).dispose();
+          o.geometry.dispose();
+        }
+      });
+    }
+    const obj = buildKite(look, 1.2);
+    obj.rotation.set(-0.35, Math.atan2(DIR.x, DIR.z), 0, "YXZ");
+    this.fx.add(obj);
+    this.skyKite = { obj, key };
+  }
+
+  private freeSpot(rnd: () => number, avoid: { x: number; z: number }[]) {
+    for (let i = 0; i < 40; i++) {
+      const p = { x: (rnd() - 0.5) * 2 * (navigation.halfWidth - 0.8), z: (rnd() - 0.5) * 2 * (navigation.halfDepth - 0.7) };
+      if (free(p, this.colliders) && avoid.every((a) => Math.hypot(a.x - p.x, a.z - p.z) > 1.1)) return p;
+    }
+    return null;
+  }
+
+  private busySpots() {
+    const a = this.layout?.anchors ?? {};
+    return Object.entries(a)
+      .filter(([k]) => /^(npc|act|exit|spawn|find)/.test(k))
+      .map(([, v]) => ({ x: v.x, z: v.z }));
+  }
+
+  private addWalkers(l: Life, scene: string, bodies: Record<string, T.Group>) {
+    const kinds = (WALKERS[scene] ?? []).slice(0, this.graphics.low ? 2 : 4);
+    let seed = l.chapter * 7919 + 17;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647), seed / 2147483647);
+    const avoid = this.busySpots();
+    kinds.forEach((kind, i) => {
+      const spot = this.freeSpot(rnd, avoid);
+      if (!spot || !bodies[kind]) return;
+      const pick = <T>(list: readonly T[]) => list[Math.floor(rnd() * list.length)];
+      const look: Look = {
+        kind,
+        skin: pick(SKINS),
+        hair: kind === "elder" ? pick(["dcd8e0", "c9c3cc", "8f8781"]) : pick(["3a2418", "16110f", "7a4a26", "c98a3e", "2e1d14"]),
+        style: pick(HAIR_STYLES),
+        top: pick(TOWN_TOPS),
+        bottom: pick(["213a8f", "2e3a59", "4f5a74", "1d6b5f"]),
+        shoes: "fff6e8",
+        accent: pick(TOWN_TOPS),
+        acc: [],
+      };
+      const a = this.makeActor(bodies[kind], look, `town${i}`);
+      a.root.position.set(spot.x, 0, spot.z);
+      a.root.rotation.y = rnd() * Math.PI * 2;
+      this.cast.add(a.root);
+      this.walkers.push({ ...a, route: [], wait: 0.5 + rnd() * 3, gait: 0, rnd });
+    });
+  }
+
+  private addFireworks() {
+    const n = this.graphics.low ? 500 : 1400;
+    const pos = new Float32Array(n * 3).fill(-500);
+    const col = new Float32Array(n * 3);
+    const g = new T.BufferGeometry();
+    g.setAttribute("position", new T.BufferAttribute(pos, 3));
+    g.setAttribute("color", new T.BufferAttribute(col, 3));
+    const mat = new T.PointsMaterial({ size: 0.3, map: sparkTexture(), vertexColors: true, transparent: true, depthWrite: false, depthTest: false, blending: T.AdditiveBlending });
+    const obj = new T.Points(g, mat);
+    obj.frustumCulled = false;
+    obj.userData.ownedGeometry = true;
+    this.fx.add(obj);
+    this.fireworks = { obj, pos, col, base: new Float32Array(n * 3), vel: new Float32Array(n * 3), life: new Float32Array(n), max: new Float32Array(n).fill(1), next: 1.2, cursor: 0 };
+  }
+
+  private burst(f: Fireworks) {
+    const palette = [
+      [1, 0.35, 0.3],
+      [1, 0.8, 0.25],
+      [0.35, 0.65, 1],
+      [0.4, 1, 0.75],
+      [1, 0.45, 0.8],
+      [1, 1, 1],
+    ];
+    const c = palette[Math.floor(Math.random() * palette.length)];
+    const c2 = palette[Math.floor(Math.random() * palette.length)];
+    const w = this.host.clientWidth / Math.max(1, this.host.clientHeight);
+    const spread = w >= 1.2 ? 5 : w >= 0.75 ? 3.4 : 2;
+    // The camera looks down steeply, so "the sky" on screen is just above the back of the diorama.
+    const at = this.camTarget
+      .clone()
+      .addScaledVector(RIGHT, (Math.random() - 0.5) * 2 * spread)
+      .addScaledVector(AWAY, 2.2 + Math.random() * 1.8);
+    at.y += 1.7 + Math.random() * 0.9;
+    const count = this.graphics.low ? 80 : 150;
+    const total = f.life.length;
+    for (let i = 0; i < count; i++) {
+      const k = f.cursor;
+      f.cursor = (f.cursor + 1) % total;
+      const u1 = Math.random() * 2 - 1,
+        a = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(1 - u1 * u1);
+      const speed = 1.7 + Math.random() * 0.5;
+      f.vel.set([Math.cos(a) * r * speed, u1 * speed + 0.4, Math.sin(a) * r * speed], k * 3);
+      f.pos.set([at.x, at.y, at.z], k * 3);
+      const cc = i % 3 ? c : c2;
+      // HDR colours so the bloom pass makes them glow
+      f.base.set([cc[0] * 3.4, cc[1] * 3.4, cc[2] * 3.4], k * 3);
+      f.max[k] = 1.4 + Math.random() * 0.7;
+      f.life[k] = f.max[k];
+    }
+  }
+
+  private animateTown(t: number, adt: number) {
+    // your kite, riding the wind up and to the left of the view
+    if (this.skyKite) {
+      const w = this.host.clientWidth / Math.max(1, this.host.clientHeight);
+      // top right of the view, clear of the HUD (chapter card top left, stats in the corner)
+      const side = w >= 1.2 ? 3.0 : w >= 0.75 ? 2.2 : 1.2;
+      const calm = this.reducedMotion ? 0 : 1;
+      const o = this.skyKite.obj;
+      o.position.copy(this.camTarget).addScaledVector(RIGHT, side + Math.sin(t * 0.45) * 0.3 * calm).addScaledVector(AWAY, 1.5);
+      o.position.y = this.camTarget.y + 2.45 + Math.sin(t * 0.7) * 0.2 * calm;
+      o.rotation.z = Math.sin(t * 0.9) * 0.16 * calm;
+      o.visible = !this.focusPoint && !this.hideMarkers;
+      const tail = o.userData.tail as T.Object3D | undefined;
+      if (tail) tail.rotation.z = Math.sin(t * 2.2) * 0.12 * calm;
+    }
+    // townsfolk
+    for (const wk of this.walkers) {
+      let moving = false;
+      const dx = this.playerPosition.x - wk.root.position.x,
+        dz = this.playerPosition.z - wk.root.position.z;
+      const near = Math.hypot(dx, dz) < 1.1 && !this.titleMode;
+      if (near) {
+        // stop and look at you
+        const want = Math.atan2(dx, dz);
+        const cur = wk.root.rotation.y;
+        wk.root.rotation.y = cur + Math.atan2(Math.sin(want - cur), Math.cos(want - cur)) * Math.min(1, adt * 5);
+      } else if (wk.wait > 0 || this.reducedMotion || !this.active) {
+        wk.wait -= this.active ? adt : 0;
+      } else if (!wk.route.length) {
+        const to = this.freeSpot(wk.rnd, this.busySpots());
+        wk.route = to ? findPath({ x: wk.root.position.x, z: wk.root.position.z }, to, this.colliders).slice(0, 24) : [];
+        if (!wk.route.length) wk.wait = 1 + wk.rnd() * 2;
+      } else {
+        const next = wk.route[0];
+        const vx = next.x - wk.root.position.x,
+          vz = next.z - wk.root.position.z;
+        const d = Math.hypot(vx, vz);
+        const step = Math.min(d, adt * (wk.baby ? 0.5 : 0.85));
+        if (d < 0.03) {
+          wk.route.shift();
+          if (!wk.route.length) wk.wait = 1.5 + wk.rnd() * 3.5;
+        } else {
+          wk.root.position.x += (vx / d) * step;
+          wk.root.position.z += (vz / d) * step;
+          const want = Math.atan2(vx, vz);
+          const cur = wk.root.rotation.y;
+          wk.root.rotation.y = cur + Math.atan2(Math.sin(want - cur), Math.cos(want - cur)) * Math.min(1, adt * 6);
+          wk.gait += step * 5.2;
+          moving = true;
+        }
+      }
+      this.animateActor(wk, moving, t + wk.who.length * 1.7, adt, wk.gait);
+    }
+    // fireworks
+    const f = this.fireworks;
+    if (f) {
+      f.next -= adt;
+      if (f.next <= 0) {
+        this.burst(f);
+        const party = this.state ? mainDone(this.state) || this.state.complete : true;
+        f.next = party ? 0.6 + Math.random() * 0.8 : 1.4 + Math.random() * 1.4;
+      }
+      for (let i = 0; i < f.life.length; i++) {
+        if (f.life[i] <= 0) continue;
+        f.life[i] -= adt;
+        const k = i * 3;
+        if (f.life[i] <= 0) {
+          f.pos[k + 1] = -500;
+          f.col.fill(0, k, k + 3);
+          continue;
+        }
+        f.vel[k + 1] -= 2.1 * adt;
+        const drag = Math.exp(-adt * 1.6);
+        f.vel[k] *= drag;
+        f.vel[k + 1] *= drag;
+        f.vel[k + 2] *= drag;
+        f.pos[k] += f.vel[k] * adt;
+        f.pos[k + 1] += f.vel[k + 1] * adt;
+        f.pos[k + 2] += f.vel[k + 2] * adt;
+        const fade = Math.min(1, f.life[i] / f.max[i]) ** 1.5 * (0.75 + 0.25 * Math.sin(t * 40 + i));
+        f.col[k] = f.base[k] * fade;
+        f.col[k + 1] = f.base[k + 1] * fade;
+        f.col[k + 2] = f.base[k + 2] * fade;
+      }
+      f.obj.geometry.getAttribute("position").needsUpdate = true;
+      f.obj.geometry.getAttribute("color").needsUpdate = true;
+    }
+  }
+
   /** Heart burst above someone's head (a bond grew); purely visual. */
   celebrate(who: string) {
     const actor = who === "you" ? this.player : this.actors.find((a) => a.who === who);
@@ -1335,6 +1712,9 @@ export class World {
       actors: this.actors.map((a) => a.who),
       points: this.points.map((p) => p.place.id),
       walking: this.walking,
+      walkers: this.walkers.length,
+      skyKite: this.skyKite?.key ?? null,
+      fireworks: !!this.fireworks,
       routePoints: this.target.length,
       titleMode: this.titleMode,
     };

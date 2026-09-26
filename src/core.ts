@@ -12,9 +12,8 @@ import {
   resolveWho,
   partnered,
   partnerName,
-  kiteName,
-  career,
-  aOrAn,
+  lexicon,
+  type ArchetypeKey,
   type BondKey,
   type Effect,
   type KiteGrade,
@@ -75,7 +74,14 @@ export interface Life {
   complete: boolean;
   /** Bonds that cooled at the last chapter change (for the chapter card). */
   drift: BondKey[];
+  /** Your kite design from the workshop (cosmetic, so it lives outside the action log). */
+  style: KiteStyle;
 }
+export interface KiteStyle {
+  pattern: string;
+  trim: number;
+}
+export const TRIM_COUNT = 6;
 
 export function newLife(identity: Identity): Life {
   return {
@@ -95,6 +101,7 @@ export function newLife(identity: Identity): Life {
     memories: [],
     complete: false,
     drift: [],
+    style: { pattern: "plain", trim: 0 },
   };
 }
 
@@ -345,7 +352,7 @@ export function replay(identity: Identity, log: string[]): Life | null {
 // saving
 // ---------------------------------------------------------------------------
 export function serialise(l: Life) {
-  return JSON.stringify({ version: 2, identity: l.identity, log: l.log, position: l.position });
+  return JSON.stringify({ version: 2, identity: l.identity, log: l.log, position: l.position, style: l.style });
 }
 export function validIdentity(i: unknown): i is Identity {
   const x = i as Identity;
@@ -369,6 +376,9 @@ export function parseLife(raw: string | null): Life | null {
     if (!l) return null;
     const p = data.position;
     if (p && Number.isFinite(p.x) && Number.isFinite(p.z) && Math.abs(p.x) < 6 && Math.abs(p.z) < 4.2) l.position = { x: p.x, z: p.z };
+    const st = data.style;
+    if (st && typeof st.pattern === "string" && /^[a-z]{1,16}$/.test(st.pattern) && Number.isInteger(st.trim) && st.trim >= 0 && st.trim < TRIM_COUNT)
+      l.style = { pattern: st.pattern, trim: st.trim };
     return l;
   } catch {
     return null;
@@ -381,7 +391,8 @@ export function parseLife(raw: string | null): Life | null {
 export function keepsakes(l: Life) {
   const cards: { chapter: number; title: string; text: string; icon: string }[] = [];
   const f = l.facts;
-  if (f.kite) cards.push({ chapter: 0, title: `Your ${kiteName(l)} kite`, text: "Nana June's gift. It knew you forever.", icon: "kite" });
+  const k = lexicon.keepsake;
+  if (f.kite) cards.push({ chapter: 0, title: k.kiteTitle(l), text: k.kiteText, icon: "kite" });
   for (let c = 0; c <= Math.min(l.chapter, chapters.length - 1); c++) {
     const r = record(l, c);
     if (!r.complete) continue;
@@ -389,9 +400,9 @@ export function keepsakes(l: Life) {
     const m = l.memories.find((x) => x.id === `a:${c}`);
     cards.push({ chapter: c, title: a.keepsake, text: m?.text ?? "", icon: a.icon });
   }
-  if (f.race === "won") cards.push({ chapter: 3, title: "Junior race medal", text: "Heavy, real, and with your name on it.", icon: "medal" });
-  if (f.race === "gave") cards.push({ chapter: 3, title: "Rowan's rosette", text: "Third place. He gave it to you.", icon: "medal" });
-  if (f.nanaNight === "yes") cards.push({ chapter: 4, title: "The lighthouse key", text: "“Somebody should keep the light on.”", icon: "key" });
+  if (f.race === "won") cards.push({ chapter: 3, title: k.medalTitle, text: k.medalText, icon: "medal" });
+  if (f.race === "gave") cards.push({ chapter: 3, title: k.rosetteTitle, text: k.rosetteText, icon: "medal" });
+  if (f.nanaNight === "yes") cards.push({ chapter: 4, title: k.keyTitle, text: k.keyText, icon: "key" });
   return cards.sort((a, b) => a.chapter - b.chapter);
 }
 
@@ -416,66 +427,17 @@ export function archetypes(l: Life) {
   return score;
 }
 
-const ARCHETYPES = {
-  keeper: ["The Keeper of the Light", "The Old Pier stands, the lighthouse turns, and the town you loved is still the town you loved."],
-  heart: ["The Heart of the House", "Every kitchen you ever stood in was full, and noisy, and yours."],
-  wanderer: ["The Wanderer", "You saw the world, and the world kept sending you home."],
-  builder: ["The Builder", "You built things that will outlast you — and learned, late, what they cost."],
-  friend: ["The Friend", "Two people knew you your whole life, and chose you every single time."],
-} as const;
+const ARCHETYPE_KEYS = ["keeper", "heart", "wanderer", "builder", "friend"] as const;
+
+export function endingKey(l: Life): ArchetypeKey {
+  const score = archetypes(l);
+  let best: (typeof ARCHETYPE_KEYS)[number] | null = null;
+  for (const k of ARCHETYPE_KEYS) if (score[k] >= 5 && (!best || score[k] > score[best])) best = k;
+  return best ?? "ordinary";
+}
 
 export function ending(l: Life) {
-  const f = l.facts;
-  const score = archetypes(l);
-  let best: keyof typeof ARCHETYPES | null = null;
-  for (const k of Object.keys(ARCHETYPES) as (keyof typeof ARCHETYPES)[]) if (score[k] >= 5 && (!best || score[k] > score[best])) best = k;
-  const [title, line] = best ? ARCHETYPES[best] : ["A Whole, Ordinary Life", "No monuments. Just a town full of people who are glad you were in it."];
-  const lines: string[] = [];
-  lines.push(`It began with a ${kiteName(l)} kite and a laugh every nine seconds.`);
-  lines.push(
-    f.boat === "truth"
-      ? "You told the truth about a toy boat when you were four, and learned how fast trust can grow."
-      : f.boat === "confessed"
-        ? "You told Rowan the truth about his boat in the end. He had always known."
-        : f.boat === "cat"
-          ? "Somewhere, a cat was blamed for a boat it never took. It never forgave you."
-          : "You carried a secret the size of a toy boat for your whole life.",
-  );
-  lines.push(
-    f.lunchbox === "stood"
-      ? "You stood up to Tobias Voss when it cost you something, and he never forgot it."
-      : f.lunchbox === "teacher"
-        ? "When Maya needed help, you went and fetched it."
-        : "Once, on a playground, you looked at your shoes. You spent a long time making up for it.",
-  );
-  lines.push(
-    f.storm === "saved"
-      ? "On the night of the storm you went out onto the pontoon for Rowan."
-      : f.storm === "pulled"
-        ? "On the night of the storm you chose Rowan over the boat."
-        : "On the night of the storm you chose your future. It turned out well; it also cost something.",
-  );
-  if (f.road) lines.push(`You became ${aOrAn(career(l))}${f.road === "city" ? " in the city" : f.road === "sea" ? " on the water" : " in Kitehaven"}.`);
-  if (f.pier)
-    lines.push(
-      f.pier === "restored"
-        ? "The Old Pier stands again, board by board, because you spoke for it."
-        : f.pier === "shared"
-          ? "The harbour has a marina and a pier now, side by side, because you gave Maya's idea a stage."
-          : f.vote === "marina"
-            ? "The marina gleams where the Old Pier stood. You backed it, and the town got its jobs."
-            : "The marina gleams where the Old Pier stood. You fought for the pier and lost, and Rowan remembers that you tried.",
-    );
-  lines.push(partnered(l) ? `You built a life with ${partnerName(l)}${f.dream === "backed" ? ", and backed their dream all the way" : ""}.` : "Your friends were your family, and it was enough.");
-  if (f.care) lines.push(f.care === "home" ? "When Mum needed you, you brought her home." : f.care === "shared" ? "When Mum needed you, you didn't do it alone." : "When Mum needed care, you paid for the best you could find, and visited on Sundays.");
-  if (f.shop) lines.push(f.shop === "reopened" ? "Dad's kite shop has children's noses pressed to the window again." : f.shop === "given" ? "Pip runs the kite shop now, in a way you don't entirely understand." : "You sold the shop and sent a postcard home from every port.");
-  const finalLine =
-    f.final === "rowan" ? "At the last festival, you held the string with Rowan." : f.final === "partner" ? `At the last festival, you held the string with ${partnerName(l)}.` : f.final === "pip" ? "At the last festival, you put the string in Pip's hands." : f.final === "maya" ? "At the last festival, Maya explained your kite to you, incorrectly." : "At the last festival, you opened your hands and let the kite fly.";
-  lines.push(finalLine);
-  const st = l.stats;
-  lines.push(
-    st.health >= 60 ? "You were still walking the cliff path at the end, and pretending it was easy." : st.health >= 30 ? "Your body kept count of the storms and the overtime, and you learned to rest." : "You were frail at the end, and fiercely yourself.",
-  );
-  lines.push(st.joy >= 65 ? "Mostly, you were happy. You noticed it while it was happening, which is rarer than it sounds." : st.joy >= 40 ? "You had your share of grey days and your share of kites." : "Some years were hard to love. You carried them anyway.");
-  return { title, line, lines, present: presentAtEnd(l).map((w) => people[w]?.name ?? w) };
+  const key = endingKey(l);
+  const [title, line] = lexicon.archetype[key];
+  return { key, title, line, lines: lexicon.endingLines(l), present: presentAtEnd(l).map((w) => people[w]?.name ?? w) };
 }

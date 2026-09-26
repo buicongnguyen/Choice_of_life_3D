@@ -77,10 +77,16 @@ def face(m, c, r, age):
             m.sphere((s * ex, ey, ez), (r * 0.17, r * 0.24, r * 0.12), "eye", "Gloss", 14, 10, ao=False)
             m.sphere((s * ex + r * 0.05, ey + r * 0.08, ez + r * 0.1), r * 0.055, "ffffff", "Glow_white", 8, 6, ao=False)
             m.sphere((s * ex - r * 0.04, ey - r * 0.08, ez + r * 0.11), r * 0.03, "ffffff", "Glow_white", 6, 4, ao=False, detail=True)
-    # brows follow the head when it turns (Head node), sit above eyes
-    for s in (-1, 1):
-        m.capsule((s * ex - r * 0.12, ey + r * 0.34, ez - r * 0.02), (s * ex + r * 0.12, ey + r * 0.37 - s * 0.0, ez - r * 0.04),
-                  r * 0.035, "ffffff", "Hair", 8)
+    # happy closed eyes (^ ^), shown instead of Eyes for a big smile
+    with m.part("Eyes_happy", (0, ey, ez)):
+        for s in (-1, 1):
+            m.tube([(s * ex - r * 0.13, ey - r * 0.03, ez + r * 0.06), (s * ex, ey + r * 0.09, ez + r * 0.1), (s * ex + r * 0.13, ey - r * 0.03, ez + r * 0.06)],
+                   r * 0.035, "eye", "Gloss", 6, ao=False)
+    # brows are their own pivots so moods can raise and tilt them
+    for s, tag in ((-1, "L"), (1, "R")):
+        with m.part("Brow" + tag, (s * ex, ey + r * 0.355, ez - r * 0.03)):
+            m.capsule((s * ex - r * 0.12, ey + r * 0.34, ez - r * 0.02), (s * ex + r * 0.12, ey + r * 0.37, ez - r * 0.04),
+                      r * 0.035, "ffffff", "Hair", 8)
     # cheeks
     for s in (-1, 1):
         m.sphere((s * r * 0.56, c.y - r * 0.28, c.z + r * 0.72), (r * 0.16, r * 0.1, r * 0.08), "ff8fa0", "Matte", 12, 8, ao=False)
@@ -89,6 +95,9 @@ def face(m, c, r, age):
     # mouths (runtime toggles smile / open while talking)
     with m.part("Mouth_smile", (0, c.y - r * 0.4, c.z + r * 0.88)):
         m.tube([(-r * 0.17, c.y - r * 0.36, c.z + r * 0.86), (0, c.y - r * 0.46, c.z + r * 0.9), (r * 0.17, c.y - r * 0.36, c.z + r * 0.86)],
+               r * 0.03, "7a2430", "Matte", 6, ao=False)
+    with m.part("Mouth_sad", (0, c.y - r * 0.42, c.z + r * 0.88)):
+        m.tube([(-r * 0.14, c.y - r * 0.46, c.z + r * 0.87), (0, c.y - r * 0.39, c.z + r * 0.9), (r * 0.14, c.y - r * 0.46, c.z + r * 0.87)],
                r * 0.03, "7a2430", "Matte", 6, ao=False)
     with m.part("Mouth_open", (0, c.y - r * 0.42, c.z + r * 0.86)):
         m.sphere((0, c.y - r * 0.42, c.z + r * 0.86), (r * 0.13, r * 0.1, r * 0.06), "7a2430", "Matte", 12, 8, ao=False)

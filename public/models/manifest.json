@@ -75,24 +75,24 @@
       "meshes": 50
     },
     "baby": {
-      "bytes": 44924,
-      "triangles": 7354,
-      "meshes": 21
+      "bytes": 49056,
+      "triangles": 7666,
+      "meshes": 24
     },
     "kid": {
-      "bytes": 137588,
-      "triangles": 30048,
-      "meshes": 45
+      "bytes": 141872,
+      "triangles": 30360,
+      "meshes": 48
     },
     "adult": {
-      "bytes": 137864,
-      "triangles": 30048,
-      "meshes": 45
+      "bytes": 141884,
+      "triangles": 30360,
+      "meshes": 48
     },
     "elder": {
-      "bytes": 137600,
-      "triangles": 30048,
-      "meshes": 45
+      "bytes": 142000,
+      "triangles": 30360,
+      "meshes": 48
     }
   },
   "low": {
@@ -167,28 +167,28 @@
       "meshes": 50
     },
     "baby": {
-      "bytes": 30292,
-      "triangles": 2524,
-      "meshes": 21
+      "bytes": 33820,
+      "triangles": 2662,
+      "meshes": 24
     },
     "kid": {
-      "bytes": 78068,
-      "triangles": 9014,
-      "meshes": 45
+      "bytes": 81720,
+      "triangles": 9152,
+      "meshes": 48
     },
     "adult": {
-      "bytes": 77948,
-      "triangles": 9014,
-      "meshes": 45
+      "bytes": 81472,
+      "triangles": 9152,
+      "meshes": 48
     },
     "elder": {
-      "bytes": 78272,
-      "triangles": 9014,
-      "meshes": 45
+      "bytes": 81760,
+      "triangles": 9152,
+      "meshes": 48
     }
   },
   "totals": {
-    "full": 5605900,
-    "low": 3299760
+    "full": 5622736,
+    "low": 3313952
   }
 }

@@ -7,6 +7,7 @@
  * options and the ending, so the town remembers what you did.
  */
 import type { Life } from "./core";
+import { u } from "./i18n";
 
 export type Stat = "health" | "joy" | "savings";
 export type BondKey = "family" | "rowan" | "maya" | "partner";
@@ -116,40 +117,138 @@ export const kiteColours: Record<string, { name: string; hex: string }> = {
   blue: { name: "sea-glass blue", hex: "2fa6e8" },
   yellow: { name: "lemon-yellow", hex: "ffd12e" },
 };
-export const kiteName = (l: Life) => kiteColours[l.facts.kite ?? "red"].name;
+export const kiteName = (l: Life) => lexicon.kite[(l.facts.kite ?? "red") as KiteKey] ?? kiteColours[l.facts.kite ?? "red"].name;
+export type KiteKey = "red" | "blue" | "yellow";
 export function interest(l: Life): "build" | "draw" | "care" {
   const f = l.facts;
   if (f.interest === "build" || f.interest === "draw" || f.interest === "care") return f.interest;
   if (f.careSpark === "yes") return "care";
   return f.spark === "bold" ? "build" : f.spark === "steady" ? "care" : "draw";
 }
-const careers = {
-  build: { city: "Structural engineer", home: "Boatbuilder", sea: "Ship's engineer" },
-  draw: { city: "Designer", home: "Kite-maker", sea: "Travelling illustrator" },
-  care: { city: "Doctor", home: "Harbour nurse", sea: "Coastguard medic" },
-} as const;
-export function career(l: Life, road = l.facts.road) {
-  const r = (road ?? "home") as "city" | "home" | "sea";
-  return careers[interest(l)][r];
+export type CareerKey = `${"build" | "draw" | "care"}.${"city" | "home" | "sea"}`;
+export function careerKey(l: Life, road = l.facts.road): CareerKey {
+  return `${interest(l)}.${(road ?? "home") as "city" | "home" | "sea"}`;
 }
+export const career = (l: Life, road = l.facts.road) => lexicon.career[careerKey(l, road)];
 export const aOrAn = (s: string) => `${/^[AEIOU]/i.test(s) ? "an" : "a"} ${s.toLowerCase()}`;
 export const workplaceVariant = (l: Life) => ({ build: "workshop", draw: "studio", care: "clinic" })[interest(l)];
 export const partnered = (l: Life) => !!l.facts.partner && l.facts.partner !== "none";
-export const partnerName = (l: Life) => (partnered(l) ? l.facts.partner : "");
+/** The partner's display name (localised); l.facts.partner stays the stable English key. */
+export const partnerName = (l: Life) => (partnered(l) ? (people[l.facts.partner.toLowerCase()]?.name ?? l.facts.partner) : "");
 export const partnerId = (l: Life) => (partnered(l) ? l.facts.partner.toLowerCase() : "");
 export const pipIsYours = (l: Life) => partnered(l);
 export const pipRole = (l: Life) => (pipIsYours(l) ? "your kid" : "Rowan's kid, and your godchild");
 export const pierState = (l: Life) => (l.facts.pier as "restored" | "shared" | "marina" | undefined) ?? "ruined";
-export function allies(l: Life) {
-  const list: string[] = [];
-  if (l.bonds.rowan >= 3) list.push("Rowan's fishing co-op");
-  if (l.facts.mayaPlan === "shared" || l.facts.mayaPlan === "kept") list.push("Maya's drawings");
-  if (l.facts.partner === "Quinn" && l.facts.dream === "backed") list.push("Councillor Quinn");
-  if (l.facts.voss && l.facts.voss !== "joined") list.push("your own record");
-  if (l.facts.lunchbox === "stood") list.push("Tobias's grudging respect");
-  if (l.facts.rally === "yes") list.push("the neighbours you rallied");
+export type AllyKey = "rowan" | "maya" | "quinn" | "record" | "tobias" | "rally";
+/** Who stands with you at the vote (keys; the lexicon names them in the current language). */
+export function allyKeys(l: Life) {
+  const list: AllyKey[] = [];
+  if (l.bonds.rowan >= 3) list.push("rowan");
+  if (l.facts.mayaPlan === "shared" || l.facts.mayaPlan === "kept") list.push("maya");
+  if (l.facts.partner === "Quinn" && l.facts.dream === "backed") list.push("quinn");
+  if (l.facts.voss && l.facts.voss !== "joined") list.push("record");
+  if (l.facts.lunchbox === "stood") list.push("tobias");
+  if (l.facts.rally === "yes") list.push("rally");
   return list;
 }
+export const allies = (l: Life) => allyKeys(l).map((k) => lexicon.ally[k]);
+
+// ---------------------------------------------------------------------------
+// the lexicon: words used by the rules, the journal and the ending. A translation
+// replaces this object wholesale (see src/lang/*.ts), so keep every field here.
+// ---------------------------------------------------------------------------
+export type ArchetypeKey = "keeper" | "heart" | "wanderer" | "builder" | "friend" | "ordinary";
+export const lexicon = {
+  kite: { red: "sunrise-red", blue: "sea-glass blue", yellow: "lemon-yellow" } as Record<KiteKey, string>,
+  career: {
+    "build.city": "Structural engineer", "build.home": "Boatbuilder", "build.sea": "Ship's engineer",
+    "draw.city": "Designer", "draw.home": "Kite-maker", "draw.sea": "Travelling illustrator",
+    "care.city": "Doctor", "care.home": "Harbour nurse", "care.sea": "Coastguard medic",
+  } as Record<CareerKey, string>,
+  ally: {
+    rowan: "Rowan's fishing co-op", maya: "Maya's drawings", quinn: "Councillor Quinn",
+    record: "your own record", tobias: "Tobias's grudging respect", rally: "the neighbours you rallied",
+  } as Record<AllyKey, string>,
+  keepsake: {
+    kiteTitle: (l: Life) => `Your ${kiteName(l)} kite`,
+    kiteText: "Nana June's gift. It knew you forever.",
+    medalTitle: "Junior race medal",
+    medalText: "Heavy, real, and with your name on it.",
+    rosetteTitle: "Rowan's rosette",
+    rosetteText: "Third place. He gave it to you.",
+    keyTitle: "The lighthouse key",
+    keyText: "“Somebody should keep the light on.”",
+  },
+  archetype: {
+    keeper: ["The Keeper of the Light", "The Old Pier stands, the lighthouse turns, and the town you loved is still the town you loved."],
+    heart: ["The Heart of the House", "Every kitchen you ever stood in was full, and noisy, and yours."],
+    wanderer: ["The Wanderer", "You saw the world, and the world kept sending you home."],
+    builder: ["The Builder", "You built things that will outlast you — and learned, late, what they cost."],
+    friend: ["The Friend", "Two people knew you your whole life, and chose you every single time."],
+    ordinary: ["A Whole, Ordinary Life", "No monuments. Just a town full of people who are glad you were in it."],
+  } as Record<ArchetypeKey, [string, string]>,
+  /** The epilogue: one line per turning point, in the order of a life. */
+  endingLines: (l: Life): string[] => {
+    const f = l.facts;
+    const lines: string[] = [];
+    lines.push(`It began with a ${kiteName(l)} kite and a laugh every nine seconds.`);
+    lines.push(
+      f.boat === "truth"
+        ? "You told the truth about a toy boat when you were four, and learned how fast trust can grow."
+        : f.boat === "confessed"
+          ? "You told Rowan the truth about his boat in the end. He had always known."
+          : f.boat === "cat"
+            ? "Somewhere, a cat was blamed for a boat it never took. It never forgave you."
+            : "You carried a secret the size of a toy boat for your whole life.",
+    );
+    lines.push(
+      f.lunchbox === "stood"
+        ? "You stood up to Tobias Voss when it cost you something, and he never forgot it."
+        : f.lunchbox === "teacher"
+          ? "When Maya needed help, you went and fetched it."
+          : "Once, on a playground, you looked at your shoes. You spent a long time making up for it.",
+    );
+    lines.push(
+      f.storm === "saved"
+        ? "On the night of the storm you went out onto the pontoon for Rowan."
+        : f.storm === "pulled"
+          ? "On the night of the storm you chose Rowan over the boat."
+          : "On the night of the storm you chose your future. It turned out well; it also cost something.",
+    );
+    if (f.road) lines.push(`You became ${aOrAn(career(l))}${f.road === "city" ? " in the city" : f.road === "sea" ? " on the water" : " in Kitehaven"}.`);
+    if (f.pier)
+      lines.push(
+        f.pier === "restored"
+          ? "The Old Pier stands again, board by board, because you spoke for it."
+          : f.pier === "shared"
+            ? "The harbour has a marina and a pier now, side by side, because you gave Maya's idea a stage."
+            : f.vote === "marina"
+              ? "The marina gleams where the Old Pier stood. You backed it, and the town got its jobs."
+              : "The marina gleams where the Old Pier stood. You fought for the pier and lost, and Rowan remembers that you tried.",
+      );
+    lines.push(partnered(l) ? `You built a life with ${partnerName(l)}${f.dream === "backed" ? ", and backed their dream all the way" : ""}.` : "Your friends were your family, and it was enough.");
+    if (f.care) lines.push(f.care === "home" ? "When Mum needed you, you brought her home." : f.care === "shared" ? "When Mum needed you, you didn't do it alone." : "When Mum needed care, you paid for the best you could find, and visited on Sundays.");
+    if (f.shop) lines.push(f.shop === "reopened" ? "Dad's kite shop has children's noses pressed to the window again." : f.shop === "given" ? "Pip runs the kite shop now, in a way you don't entirely understand." : "You sold the shop and sent a postcard home from every port.");
+    lines.push(
+      f.final === "rowan"
+        ? "At the last festival, you held the string with Rowan."
+        : f.final === "partner"
+          ? `At the last festival, you held the string with ${partnerName(l)}.`
+          : f.final === "pip"
+            ? "At the last festival, you put the string in Pip's hands."
+            : f.final === "maya"
+              ? "At the last festival, Maya explained your kite to you, incorrectly."
+              : "At the last festival, you opened your hands and let the kite fly.",
+    );
+    const st = l.stats;
+    lines.push(
+      st.health >= 60 ? "You were still walking the cliff path at the end, and pretending it was easy." : st.health >= 30 ? "Your body kept count of the storms and the overtime, and you learned to rest." : "You were frail at the end, and fiercely yourself.",
+    );
+    lines.push(st.joy >= 65 ? "Mostly, you were happy. You noticed it while it was happening, which is rarer than it sounds." : st.joy >= 40 ? "You had your share of grey days and your share of kites." : "Some years were hard to love. You carried them anyway.");
+    return lines;
+  },
+};
+export type Lexicon = typeof lexicon;
 
 // ---------------------------------------------------------------------------
 // the people of Kitehaven
@@ -269,7 +368,7 @@ export const people: Record<string, Person> = {
 };
 /** "partner" in a moment resolves to whoever you chose on the roof. */
 export const resolveWho = (who: string, l: Life) => (who === "partner" ? partnerId(l) : who);
-export const personName = (who: string, l: Life) => (who === "you" ? "You" : (people[resolveWho(who, l)]?.name ?? who));
+export const personName = (who: string, l: Life) => (who === "you" ? u("dlg.you") : (people[resolveWho(who, l)]?.name ?? who));
 
 const d = (name: string, prop: string, stat: Stat, line: string): Discovery => ({ name, prop, stat, line });
 const o = (label: Text, hint: Text, effect: Option["effect"], reply: Text, memory: Text, extra: Partial<Option> = {}): Option => ({
