@@ -21,10 +21,12 @@ choice you make decides who is still holding the string with you at the end.
 - **The town remembers.** A vote in chapter ten is decided by the allies you earned decades
   earlier. The pier's fate changes the view for the rest of your life.
 - **Six endings**, and the people you kept close come to the last festival.
+- **Made to be read comfortably:** story text arrives in short beats with 3D portraits of
+  whoever is speaking, choices sit side by side, and each chapter opens like a film.
 
 ## Controls
-WASD or the arrow keys to walk, or tap or click the ground. **E** or **Space** to talk or act,
-**1–5** to choose, **J** for the journal, **Esc** to pause. **Go to…** walks you to anyone or
+WASD or the arrow keys to walk, or tap or click the ground. **E** or **Space** to talk or act.
+In conversations, **click, Space or Enter** shows the next line and **1–5** chooses; **J** for the journal, **Esc** to pause. **Go to…** walks you to anyone or
 anything automatically. On touch screens, use the pad or tap to walk. The kite game: hold to
 pull the line in, release to let it out. It has a "Steady hands" assist and a skip.
 
@@ -38,7 +40,7 @@ Node.js 22 or newer.
 ```sh
 npm ci
 npm run dev          # http://127.0.0.1:5173
-npm test             # rules, saves, balance, endings, content and navigation (23 tests)
+npm test             # rules, saves, balance, endings, content, beats and navigation (25 tests)
 npm run build        # type-check, bundle, write dist/release.json
 npm run preview
 ```
@@ -51,6 +53,8 @@ GAME_URL=http://127.0.0.1:4196/ GPU=1 node scripts/smoke.mjs     # 13 end-to-end
 GAME_URL=http://127.0.0.1:4196/ GPU=1 node scripts/capture.mjs   # screenshots of all 12 chapters
 GAME_URL=http://127.0.0.1:4197/ GPU=1 node scripts/perf.mjs      # frame times, draw calls
 npx tsx scripts/balance.mts                                       # 400 random lives: stats and endings
+npx tsx scripts/textstats.mts                                     # how much text each screen shows
+GAME_URL=http://127.0.0.1:4197/ node scripts/audit-ui.mjs        # message sizes at PC resolutions
 ```
 
 Screenshots go to `docs/captures/`, which is git-ignored.

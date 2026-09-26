@@ -60,7 +60,13 @@ async function open({ viewport = { width: 1280, height: 800 }, save, mobile = fa
 const diag = (page) => page.evaluate(() => window.lifeDiagnostics);
 const ready = (page) => page.waitForFunction(() => window.lifeDiagnostics && window.lifeDiagnostics.loading === false, null, { timeout: 60000 });
 const panel = (page, p) => page.waitForFunction((p) => window.lifeDiagnostics.panel === p, p, { timeout: 30000 });
+/** Text arrives in beats; a player can skip straight to the choice or the outcome. */
+async function skipBeats(page) {
+  const skip = page.locator('[role="dialog"] [data-action="beat-all"]');
+  if (await skip.count()) await skip.first().click();
+}
 async function closePanel(page) {
+  await skipBeats(page);
   await page.locator('[role="dialog"] [data-action="close"]').last().click();
   await panel(page, "none");
 }
@@ -86,13 +92,14 @@ async function continueSaved(page) {
   await page.locator('[data-action="start"]').click();
   await ready(page);
   await panel(page, "briefing");
-  assert.match(await page.locator(".briefing h2").innerText(), /Under the Eaves/);
+  assert.match(await page.locator(".cinema h2").innerText(), /Under the Eaves/);
   await closePanel(page);
   check("title → customise → begin a new life → chapter card");
 
   await travel(page, "person:nana");
   await panel(page, "moment");
   assert.equal((await diag(page)).moment, "c1.kite");
+  await skipBeats(page);
   await page.locator('[data-action="choose"]').first().click();
   await panel(page, "response");
   let d = await diag(page);
@@ -120,6 +127,7 @@ async function continueSaved(page) {
 
   await travel(page, "person:mum");
   await panel(page, "moment");
+  await skipBeats(page);
   await page.locator('[data-action="choose"]').nth(1).click();
   await panel(page, "response");
   await closePanel(page);
@@ -145,7 +153,7 @@ async function continueSaved(page) {
 
   await travel(page, "exit");
   await page.waitForFunction(() => window.lifeDiagnostics.chapter === 1 && window.lifeDiagnostics.panel === "briefing" && !window.lifeDiagnostics.loading, null, { timeout: 60000 });
-  assert.match(await page.locator(".briefing h2").innerText(), /Gap in the Fence/);
+  assert.match(await page.locator(".cinema h2").innerText(), /Gap in the Fence/);
   const pos = (await diag(page)).render.position;
   assert.ok(Math.hypot(pos.x - -1.2, pos.z - 2.8) < 0.3, `chapter 2 starts at its spawn, not by the old gate (${JSON.stringify(pos)})`);
   check("the golden gate leads to chapter 2, starting at the new scene's spawn");
@@ -214,6 +222,7 @@ async function continueSaved(page) {
   await travel(page, "self");
   await panel(page, "moment");
   assert.equal((await diag(page)).moment, "c12.last");
+  await skipBeats(page);
   await page.locator('[data-action="choose"]').last().click();
   await panel(page, "response");
   await closePanel(page);
@@ -245,13 +254,19 @@ async function continueSaved(page) {
   assert.ok(await page.locator(".dpad").isVisible());
   await travel(page, "person:rowan");
   await panel(page, "moment");
-  await page.waitForTimeout(450); // let the dialog finish rising into place
+  assert.equal(await page.locator('[data-action="choose"]').count(), 0, "the storm arrives in beats; choices wait for the last one");
+  for (let i = 0; i < 6 && !(await page.locator('[data-action="choose"]').count()); i++) {
+    await page.locator(".beat").first().tap();
+    await page.waitForTimeout(250);
+  }
+  assert.ok(await page.locator('[data-action="choose"]').count(), "tapping the line moves through the beats to the choice");
+  await page.waitForTimeout(700); // let the dialog and its choices finish rising into place
   const box = await page.locator(".dialog").boundingBox();
   await page.screenshot({ path: "docs/captures/smoke-phone-dialog.png" });
   console.log("phone dialog box", JSON.stringify(box), await page.evaluate(() => [innerWidth, innerHeight]));
   assert.ok(box.y >= 0 && box.y + box.height <= 844 && box.x >= 0 && box.x + box.width <= 390, "dialog fits the phone");
   await page.screenshot({ path: "docs/captures/smoke-phone-dialog.png" });
-  check("phone: light graphics by default, touch pad, the dialog fits a 390×844 screen");
+  check("phone: light graphics, touch pad, tap-through beats, the dialog fits a 390×844 screen");
   await page.close();
 }
 

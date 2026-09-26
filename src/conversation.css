@@ -1,0 +1,598 @@
+/* =====================================================================
+   Conversation v2: beats, side-by-side choices, 3D portraits
+   ===================================================================== */
+.dialog {
+  width: min(1060px, calc(100% - 32px));
+  max-height: min(60vh, 560px);
+}
+.dialog header {
+  padding: 12px 16px 6px;
+}
+.dialog h2 {
+  font-size: 1.45em;
+}
+.dialog .who {
+  font-size: 0.82em;
+}
+.portrait.photo {
+  background: var(--c);
+  overflow: hidden;
+  padding: 0;
+}
+.portrait.photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.dialog .portrait {
+  width: 64px;
+  height: 64px;
+}
+.dots {
+  display: inline-flex;
+  gap: 5px;
+  margin: 0 8px 0 auto;
+  align-self: center;
+}
+.dots button {
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(29, 35, 64, 0.18);
+  cursor: pointer;
+}
+.dots button.past {
+  background: rgba(29, 35, 64, 0.45);
+}
+.dots button.on {
+  background: var(--sun);
+  box-shadow: 0 0 0 2px var(--ink);
+}
+.dialog header .dots ~ .close {
+  margin-left: 0;
+}
+.dialog-body {
+  padding: 0 16px 14px;
+}
+.beat {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 2px 0 4px;
+  cursor: pointer;
+  color: var(--ink-2);
+  font-size: 1.14em;
+  line-height: 1.5;
+  position: relative;
+}
+.beat.last {
+  cursor: default;
+}
+.beat .line {
+  display: block;
+  min-height: 1.5em;
+  padding-right: 1.6em;
+}
+.beat .w {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(4px);
+  animation: wordIn 0.26s ease-out forwards;
+  animation-delay: calc(var(--i) * 34ms);
+}
+.beat .w.q {
+  color: var(--ink);
+  font-weight: 600;
+}
+.beat.done .w,
+.reduced .beat .w {
+  animation: none;
+  opacity: 1;
+  transform: none;
+}
+@keyframes wordIn {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.beat .more {
+  position: absolute;
+  right: 2px;
+  bottom: 6px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--sun);
+  border: 2px solid var(--ink);
+  color: var(--ink);
+  font-size: 0.8em;
+  animation: nudge 1s ease-in-out infinite;
+}
+.reduced .beat .more {
+  animation: none;
+}
+@keyframes nudge {
+  50% {
+    transform: translateX(3px);
+  }
+}
+.beat.memory {
+  background: var(--cream);
+  border-left: 5px solid var(--sun);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 1.02em;
+}
+.beat .memo {
+  display: block;
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #b27a00;
+  margin-bottom: 2px;
+}
+.beat-foot {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+.options {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+.option {
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  animation: optionIn 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+  animation-delay: calc(var(--n) * 60ms);
+}
+.reduced .option {
+  animation: none;
+}
+@keyframes optionIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+.option .num {
+  width: 26px;
+  height: 26px;
+  font-size: 0.85em;
+}
+.option strong {
+  font-size: 1em;
+  line-height: 1.25;
+}
+.option small {
+  font-size: 0.84em;
+}
+.outcome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.outcome .note {
+  flex: 1;
+  margin: 0;
+  padding: 0.45em 0.7em;
+}
+.outcome .primary {
+  margin-left: auto;
+}
+/* While you talk, the HUD steps back: fewer boxes between you and the people. */
+body[data-panel="moment"] .controls,
+body[data-panel="moment"] .quest,
+body[data-panel="moment"] .hunt,
+body[data-panel="moment"] .lifeline,
+body[data-panel="response"] .controls,
+body[data-panel="response"] .quest,
+body[data-panel="response"] .hunt,
+body[data-panel="response"] .lifeline,
+body[data-panel="activity"] .controls,
+body[data-panel="activity"] .quest,
+body[data-panel="activity"] .lifeline,
+body[data-panel="moment"] .hud-bottom,
+body[data-panel="response"] .hud-bottom,
+body[data-panel="activity"] .hud-bottom,
+body[data-panel="briefing"] .screen {
+  opacity: 0;
+  pointer-events: none;
+}
+.screen > * {
+  transition: opacity 0.25s ease;
+}
+.toast {
+  bottom: auto;
+  top: calc(max(14px, env(safe-area-inset-top)) + 4px);
+  width: min(460px, calc(100% - 32px));
+  padding: 9px 14px;
+  font-size: 0.92em;
+  line-height: 1.35;
+}
+.toast small {
+  color: var(--ink-2);
+}
+@media (min-width: 761px) {
+  .toast {
+    top: 62px;
+  }
+}
+
+/* =====================================================================
+   Cinematic chapter intro
+   ===================================================================== */
+.cinema {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto !important;
+  color: #fff;
+  background: radial-gradient(ellipse at 50% 40%, transparent 55%, rgba(10, 12, 30, 0.45));
+}
+.cinema .bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 12vh;
+  background: #0b0d1f;
+  animation: barIn 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.cinema .bar.top {
+  top: 0;
+  --from: -100%;
+}
+.cinema .bar.bottom {
+  bottom: 0;
+  height: 16vh;
+  --from: 100%;
+}
+@keyframes barIn {
+  from {
+    transform: translateY(var(--from));
+  }
+}
+.cine-head {
+  position: absolute;
+  left: max(28px, 5vw);
+  top: calc(12vh + 3vh);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  text-shadow: 0 3px 14px rgba(0, 0, 0, 0.45);
+  animation: headIn 0.9s 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes headIn {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+}
+.cine-num {
+  margin-right: 0.12em;
+  font: 400 clamp(64px, 10vw, 120px) / 0.9 "Libre Caslon Display", Georgia, serif;
+  color: var(--sun);
+  -webkit-text-stroke: 3px var(--ink);
+  text-shadow: none;
+}
+.cine-head .kicker {
+  color: var(--sun-2);
+}
+.cine-head h2 {
+  margin: 2px 0;
+  font: 400 clamp(36px, 5.4vw, 72px) / 1 "Libre Caslon Display", Georgia, serif;
+}
+.cine-head .place {
+  margin: 0;
+  font-weight: 600;
+  opacity: 0.9;
+}
+.cine-text {
+  position: absolute;
+  left: 50%;
+  bottom: calc(16vh + 18px);
+  transform: translateX(-50%);
+  width: min(760px, calc(100% - 32px));
+  background: rgba(11, 13, 31, 0.72);
+  backdrop-filter: blur(4px);
+  border-radius: 20px;
+  padding: 14px 20px 12px;
+  animation: textIn 0.8s 0.6s both;
+}
+@keyframes textIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 16px);
+  }
+}
+.cine-text .beat {
+  color: #f4f1ff;
+  font-size: 1.18em;
+}
+.cine-text .beat .w.q {
+  color: #fff;
+}
+.cine-text .dots {
+  margin: 6px 0 0;
+}
+.cine-text .dots button {
+  background: rgba(255, 255, 255, 0.25);
+}
+.cine-text .dots button.past {
+  background: rgba(255, 255, 255, 0.55);
+}
+.cine-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 16vh;
+  min-height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 max(20px, 4vw);
+}
+.cine-goal {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 0.95em;
+}
+.cine-goal .quest-mark {
+  border-color: #fff;
+}
+.cine-time,
+.cinema .drift {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  padding: 0.3em 0.8em;
+  font-size: 0.86em;
+  margin: 0;
+  color: #fff;
+}
+.cinema .drift {
+  background: rgba(255, 95, 143, 0.25);
+}
+.cine-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.cinema .ghost {
+  color: #fff;
+}
+.cinema .tips {
+  position: absolute;
+  right: max(20px, 4vw);
+  top: calc(12vh + 3vh);
+  width: min(300px, 40vw);
+  margin: 0;
+  padding: 12px 14px;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  background: rgba(11, 13, 31, 0.72);
+  border-radius: 16px;
+  font-size: 0.85em;
+}
+.reduced .cinema .bar,
+.reduced .cine-head,
+.reduced .cine-text {
+  animation: none;
+}
+
+/* =====================================================================
+   Rewards, hearts and speech bubbles, drawn over the 3D view
+   ===================================================================== */
+#pops {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+.pop {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 0.25em 0.7em;
+  border-radius: 999px;
+  border: 2px solid var(--ink);
+  background: #fff;
+  font: 700 15px/1.2 "DM Sans", sans-serif;
+  color: var(--ink);
+  white-space: nowrap;
+  box-shadow: 0 3px 0 var(--ink);
+  animation: popUp 2.2s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.pop.health {
+  background: var(--health);
+  color: #fff;
+}
+.pop.joy {
+  background: var(--joy);
+}
+.pop.savings {
+  background: var(--savings);
+  color: #fff;
+}
+.pop.bond {
+  background: var(--pink);
+  color: #fff;
+}
+.pop.down {
+  filter: saturate(0.5) brightness(0.8);
+}
+@keyframes popUp {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -30%) scale(0.6);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, -60%) scale(1.08);
+  }
+  75% {
+    opacity: 1;
+    transform: translate(-50%, -160%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -190%) scale(0.96);
+  }
+}
+.burst {
+  position: absolute;
+  color: var(--pink);
+  font-size: 20px;
+  text-shadow: 0 2px 0 rgba(29, 35, 64, 0.35);
+  animation: burst 1.2s ease-out forwards;
+}
+@keyframes burst {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.4);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.1);
+  }
+}
+.bubble {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  max-width: 280px;
+  padding: 10px 14px;
+  background: #fff;
+  border: 3px solid var(--ink);
+  border-radius: 18px;
+  box-shadow: 0 4px 0 var(--ink);
+  font: 500 14px/1.4 "DM Sans", sans-serif;
+  color: var(--ink);
+  animation: bubbleIn 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+}
+.bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -12px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-right: 3px solid var(--ink);
+  border-bottom: 3px solid var(--ink);
+  transform: translateX(-50%) rotate(45deg);
+}
+.bubble small {
+  color: var(--ink-2);
+}
+@keyframes bubbleIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -80%) scale(0.8);
+  }
+}
+.reduced .pop,
+.reduced .bubble {
+  animation: none;
+}
+
+/* Titles that receive focus programmatically (for screen readers) shouldn't draw a box. */
+h1[tabindex="-1"]:focus,
+h2[tabindex="-1"]:focus {
+  outline: none;
+}
+
+@media (max-width: 760px) {
+  .dialog {
+    width: calc(100% - 16px);
+    max-height: 70vh;
+  }
+  .options {
+    gap: 7px;
+  }
+  .option {
+    padding: 8px 10px;
+  }
+  .option .body {
+    gap: 2px;
+  }
+  .option small {
+    font-size: 0.8em;
+  }
+  .dialog .portrait {
+    width: 50px;
+    height: 50px;
+  }
+  .beat {
+    font-size: 1.02em;
+  }
+  .options {
+    grid-template-columns: 1fr;
+  }
+  .option {
+    flex-direction: row;
+    gap: 10px;
+  }
+  .cinema .bar.top {
+    height: 7vh;
+  }
+  .cinema .bar.bottom {
+    height: 24vh;
+  }
+  .cine-head {
+    top: calc(7vh + 2vh);
+    left: 18px;
+    gap: 10px;
+  }
+  .cine-num {
+    font-size: 56px;
+  }
+  .cine-head h2 {
+    font-size: 34px;
+  }
+  .cine-text {
+    bottom: calc(24vh + 12px);
+    padding: 12px 14px;
+  }
+  .cine-text .beat {
+    font-size: 1em;
+  }
+  .cine-foot {
+    height: 24vh;
+    flex-direction: column;
+    justify-content: center;
+    align-items: stretch;
+    gap: 10px;
+    padding: 10px 16px;
+  }
+  .cine-actions {
+    justify-content: flex-end;
+  }
+  .cinema .tips {
+    display: none;
+  }
+  .toast {
+    top: auto;
+    bottom: 250px;
+  }
+}

@@ -1,4 +1,5 @@
 import "./style.css";
+import "./conversation.css";
 import { World, type Place } from "./world";
 import { graphicsQuality, type GraphicsQuality } from "./graphics";
 import { KiteGame } from "./kite-game";
@@ -22,7 +23,11 @@ import {
   type Identity,
   type Life,
 } from "./core";
-import { activityUI, briefingUI, endingUI, esc, exploreUI, huntUI, journalUI, momentUI, pauseUI, playUI, responseUI, restartUI, titleUI, chips } from "./ui";
+import { activityUI, briefingUI, endingUI, esc, exploreUI, huntUI, journalUI, momentUI, pauseUI, playUI, responseUI, restartUI, titleUI, chips, statInfo, bondName, type BeatState } from "./ui";
+import { beats, wordCount } from "./beats";
+import { cue, blip, voicePitch, setAmbience, setEnabled, stopAmbience } from "./audio";
+import { BONDS, STATS } from "./core";
+import type { Effect } from "./content";
 
 const ui = document.querySelector<HTMLElement>("#ui")!;
 const host = document.querySelector<HTMLElement>("#world")!;
@@ -52,6 +57,12 @@ let activeMoment: Moment | null = null;
 let focusId: string | null = null;
 let response = { title: "", text: "", effect: {}, note: "", who: undefined as string | undefined };
 let journalTab = "people";
+/** The beat shown in the open dialog, reply or chapter intro. */
+let beat: BeatState = { list: [{ text: "" }], index: 0 };
+let briefingReopened = false;
+let beatShownAt = 0;
+let beatKey = "";
+let blipTimers: number[] = [];
 let makeOpen = !saved && innerWidth > 760;
 let padPointer: number | null = null;
 let loading = true,
@@ -92,35 +103,12 @@ try {
 // ---------------------------------------------------------------------------
 // small services
 // ---------------------------------------------------------------------------
-let audio: AudioContext | undefined;
-function cue(kind: "soft" | "choice" | "find" | "chapter" | "done" = "soft") {
-  if (!sound) return;
-  try {
-    audio ??= new AudioContext();
-    void audio.resume();
-    const t = audio.currentTime;
-    const notes = { soft: [523.25, 659.25], choice: [392, 493.88, 587.33], find: [783.99, 1046.5], chapter: [392, 523.25, 659.25, 783.99], done: [523.25, 659.25, 783.99, 1046.5] }[kind];
-    notes.forEach((f, i) => {
-      const o = audio!.createOscillator(),
-        g = audio!.createGain();
-      o.type = i % 2 ? "triangle" : "sine";
-      o.frequency.value = f;
-      g.gain.setValueAtTime(0, t + i * 0.08);
-      g.gain.linearRampToValueAtTime(0.035, t + i * 0.08 + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.08 + 0.5);
-      o.connect(g);
-      g.connect(audio!.destination);
-      o.start(t + i * 0.08);
-      o.stop(t + i * 0.08 + 0.52);
-    });
-  } catch {}
-}
-
 function prefs(extra: Record<string, unknown> = {}) {
   try {
     localStorage.setItem("choice-of-life-settings", JSON.stringify({ sound, reduced, pace, largeText, closeups, graphics, kiteAssist, ...extra }));
   } catch {}
   world.reducedMotion = reduced;
+  setEnabled(sound);
   world.speed = pace === "gentle" ? 2.3 : pace === "normal" ? 2.9 : 3.6;
   document.body.classList.toggle("reduced", reduced);
   document.body.classList.toggle("large-text", largeText);
@@ -184,10 +172,10 @@ let renderedPanel: Panel = "none";
 let returnFocus: string | undefined;
 
 function panelUI() {
-  if (panel === "moment" && activeMoment) return momentUI(state, activeMoment);
-  if (panel === "response") return responseUI(response.title, response.text, response.effect, state, response.note, response.who);
+  if (panel === "moment" && activeMoment) return momentUI(state, activeMoment, beat);
+  if (panel === "response") return responseUI(response.title, beat, response.text, response.effect, state, response.note, response.who);
   if (panel === "activity") return activityUI(state, { active: !!kite, assist: kiteAssist });
-  if (panel === "briefing") return briefingUI(state, firstBriefing && state.chapter === 0);
+  if (panel === "briefing") return briefingUI(state, firstBriefing && state.chapter === 0, beat, briefingReopened);
   if (panel === "explore") return exploreUI(world.places());
   if (panel === "journal") return journalUI(state, journalTab);
   if (panel === "pause") return pauseUI({ storage: storageIssue, graphics, largeText, reduced, sound, closeups });
@@ -217,6 +205,7 @@ function render(focus = false) {
   world.clearInput();
   padPointer = null;
   world.focus(closeups && ["moment", "response", "activity"].includes(panel) ? focusId : null);
+  world.hideMarkers = panel === "briefing";
   layoutWorld();
   if (mode === "play") nearby(world.nearest());
   if (panel === "activity") mountKite();
@@ -229,6 +218,131 @@ function render(focus = false) {
     target?.focus({ preventScroll: true });
   }
   renderedPanel = panel;
+  startBeat();
+}
+
+// ---------------------------------------------------------------------------
+// beats: long text arrives a few lines at a time, with a soft voice while it appears
+// ---------------------------------------------------------------------------
+const WORD_MS = 34;
+const beatPanels = ["moment", "response", "briefing"];
+function setBeats(list: { text: string; memory?: boolean }[]) {
+  beat = { list: list.length ? list : [{ text: "" }], index: 0 };
+  beatKey = "";
+}
+const textBeats = (t: string) => beats(t).map((x) => ({ text: x }));
+const lastBeat = () => beat.index >= beat.list.length - 1;
+function speaker() {
+  if (panel === "moment" && activeMoment) return personName(activeMoment.who, state);
+  if (panel === "response") return response.who ? personName(response.who, state) : "narrator";
+  return "narrator";
+}
+function stopBlips() {
+  blipTimers.forEach((t) => clearTimeout(t));
+  blipTimers = [];
+}
+function startBeat() {
+  if (!beatPanels.includes(panel)) {
+    stopBlips();
+    beatKey = "";
+    return;
+  }
+  const key = `${panel}:${beat.index}:${beat.list[beat.index]?.text}`;
+  if (key === beatKey) return;
+  beatKey = key;
+  beatShownAt = performance.now();
+  stopBlips();
+  if (reduced || !sound || panel === "briefing") return;
+  const pitch = voicePitch(speaker());
+  const n = wordCount(beat.list[beat.index]?.text ?? "");
+  for (let i = 0; i < n; i += 2) blipTimers.push(window.setTimeout(() => blip(pitch), i * WORD_MS));
+}
+function revealing() {
+  if (reduced) return false;
+  return performance.now() - beatShownAt < wordCount(beat.list[beat.index]?.text ?? "") * WORD_MS + 250;
+}
+function focusBeat() {
+  const el =
+    ui.querySelector<HTMLElement>('[role="dialog"] [data-action="choose"]:not(:disabled)') ??
+    ui.querySelector<HTMLElement>('[role="dialog"] .beat:not(.last)') ??
+    ui.querySelector<HTMLElement>('[role="dialog"] [data-action="close"].primary') ??
+    ui.querySelector<HTMLElement>('[role="dialog"] h2');
+  el?.focus({ preventScroll: true });
+}
+/** Click, Space or Enter: finish the line that is appearing, or move to the next one. */
+function advanceBeat(all = false) {
+  if (!all && revealing()) {
+    ui.querySelector(".beat")?.classList.add("done");
+    beatShownAt = 0;
+    stopBlips();
+    return;
+  }
+  if (lastBeat()) return;
+  beat = { ...beat, index: all ? beat.list.length - 1 : beat.index + 1 };
+  render();
+  focusBeat();
+}
+
+// ---------------------------------------------------------------------------
+// juice: rewards float up from your character; small talk appears as speech bubbles
+// ---------------------------------------------------------------------------
+const pops = document.querySelector<HTMLElement>("#pops")!;
+function popRewards(effect: Effect, who = "you") {
+  const at = world.screenOf(who);
+  if (!at) return;
+  const items: { cls: string; label: string }[] = [];
+  for (const k of STATS) if (effect[k]) items.push({ cls: `${k} ${effect[k]! < 0 ? "down" : ""}`, label: `${statInfo[k].icon} ${effect[k]! > 0 ? "+" : ""}${effect[k]}` });
+  for (const b of BONDS) if (effect[b]) items.push({ cls: `bond ${effect[b]! < 0 ? "down" : ""}`, label: `${effect[b]! > 0 ? "❤" : "💔"} ${bondName(b, state)} ${effect[b]! > 0 ? "+" : ""}${effect[b]}` });
+  items.forEach((it, i) => {
+    const el = document.createElement("div");
+    el.className = `pop ${it.cls}`;
+    el.textContent = it.label;
+    el.style.left = `${at.x}px`;
+    el.style.top = `${at.y - i * 34}px`;
+    el.style.animationDelay = `${i * 120}ms`;
+    pops.append(el);
+    setTimeout(() => el.remove(), 2400 + i * 120);
+  });
+  if (!reduced && BONDS.some((b) => (effect[b] ?? 0) > 0)) {
+    cue("heart");
+    for (let i = 0; i < 9; i++) {
+      const h = document.createElement("div");
+      h.className = "burst";
+      h.textContent = "❤";
+      const a = (i / 9) * Math.PI * 2;
+      h.style.left = `${at.x}px`;
+      h.style.top = `${at.y + 24}px`;
+      h.style.setProperty("--dx", `${Math.cos(a) * (60 + Math.random() * 40)}px`);
+      h.style.setProperty("--dy", `${Math.sin(a) * (40 + Math.random() * 30) - 40}px`);
+      pops.append(h);
+      setTimeout(() => h.remove(), 1300);
+    }
+  }
+}
+function bubble(who: string, html: string, ms = 4800) {
+  pops.querySelectorAll(`.bubble[data-who="${CSS.escape(who)}"]`).forEach((b) => b.remove());
+  const el = document.createElement("div");
+  el.className = "bubble";
+  el.dataset.who = who;
+  el.innerHTML = html;
+  pops.append(el);
+  announcer.textContent = el.textContent ?? "";
+  const until = performance.now() + ms;
+  const follow = () => {
+    const at = world.screenOf(who, 0.7);
+    if (!el.isConnected) return;
+    if (!at || performance.now() > until || mode !== "play") return el.remove();
+    el.style.left = `${at.x}px`;
+    el.style.top = `${at.y}px`;
+    requestAnimationFrame(follow);
+  };
+  follow();
+}
+function ambience() {
+  if (!sound) return stopAmbience();
+  if (mode === "play") setAmbience(chapterOf(state).env, chapterOf(state).scene);
+  else if (mode === "title") setAmbience("festival", "pier");
+  else setAmbience("dusk", "clifftop");
 }
 
 function layoutWorld() {
@@ -297,10 +411,18 @@ function finishKite(grade: KiteGrade) {
 // ---------------------------------------------------------------------------
 // the story flow
 // ---------------------------------------------------------------------------
+function openBriefing(reopened = false) {
+  panel = "briefing";
+  briefingReopened = reopened;
+  setBeats(textBeats(text(chapterOf(state).intro, state)));
+}
+
 function openMoment(m: Moment, placeId: string) {
   activeMoment = m;
   focusId = placeId;
   panel = "moment";
+  const ctx = m.context?.(state);
+  setBeats([...textBeats(text(m.prompt, state)), ...(ctx ? [{ text: ctx, memory: true }] : [])]);
   cue();
   render(true);
 }
@@ -320,6 +442,7 @@ function interact(place: Place) {
       response = { title: personName(who, l), text: people[who].meet ?? people[who].bark(l), effect: {}, note: mainDone(l) ? "Friendship is a good beginning, whatever you decided on the roof." : "Go back to Rowan whenever you're ready to talk about it.", who };
       focusId = place.id;
       panel = "response";
+      setBeats(textBeats(response.text));
       cue();
       render(true);
       return;
@@ -327,10 +450,11 @@ function interact(place: Place) {
     if (side) return openMoment(side, place.id);
     const waiting = mine.find((m) => m.kind === "side" && !Object.hasOwn(l.done, m.id));
     if (waiting && freeTime(l) === 0) {
-      toast(`<b>${esc(personName(who, l))}</b> waves. You've no free time left in this chapter.`);
+      bubble(who, "👋 <small>Another time?</small>", 3000);
+      toast("You've no free time left in this chapter.");
       return;
     }
-    toast(`<b>${esc(personName(who, l))}:</b> ${esc(people[who]?.bark(l) ?? "")}`);
+    bubble(who, esc(people[who]?.bark(l) ?? ""));
     return;
   }
   if (place.kind === "activity") {
@@ -348,9 +472,10 @@ function interact(place: Place) {
       panel = "none";
       save(false);
       render(true);
+      ambience();
       return;
     }
-    panel = "briefing";
+    openBriefing();
     firstBriefing = false;
     void showChapter();
   }
@@ -363,7 +488,8 @@ function collect(place: Place) {
     const d = chapterOf(state).finds[place.index];
     const m = state.memories.at(-1)!;
     cue("find");
-    toast(`<b>${esc(d.name)}</b> — ${esc(d.line)} <span class="chips inline">${chips(m.effect, state)}</span>`);
+    toast(`<b>${esc(d.name)}</b> <span class="chips inline">${chips(m.effect, state)}</span><br><small>${esc(d.line)}</small>`, 3600);
+    popRewards(m.effect);
     refreshHud();
   } else if (place.kind === "hunt") {
     if (!perform(`hunt:${place.index}`)) return;
@@ -374,7 +500,7 @@ function collect(place: Place) {
       activityResult();
       return;
     }
-    toast(`<b>Found: ${esc(item.name)}</b> — ${esc(item.line)}`);
+    toast(`<b>Found: ${esc(item.name)}</b><br><small>${esc(item.line)}</small>`, 3600);
     refreshHud();
   }
 }
@@ -382,10 +508,12 @@ function collect(place: Place) {
 function activityResult() {
   const m = state.memories.at(-1)!;
   const a = chapterOf(state).activity;
-  response = { title: a.keepsake, text: m.text, effect: m.effect, note: "A new keepsake is in your journal. Later chapters will remember it.", who: undefined };
+  response = { title: a.keepsake, text: m.text, effect: m.effect, note: "A new keepsake is in your journal.", who: undefined };
   panel = "response";
+  setBeats(textBeats(response.text));
   cue("done");
   render(true);
+  popRewards(m.effect);
 }
 
 function choose(index: number) {
@@ -413,10 +541,12 @@ function choose(index: number) {
             : "That was the last of your free time. The main story is still waiting.";
     response = { title: text(m.title, before), text: mem.detail, effect: mem.effect, note, who: m.who };
     panel = "response";
+    setBeats(textBeats(response.text));
     cue("choice");
     if (m.id === "c12.last" && state.facts.final === "free") world.releaseKite();
     render(true);
     world.acknowledge();
+    popRewards(mem.effect);
   } finally {
     busy = false;
   }
@@ -431,9 +561,10 @@ async function showChapter() {
     loading = false;
     mode = state.complete ? "ending" : "play";
     if (state.complete) panel = "none";
-    else if (panel === "none") panel = "briefing";
+    else if (panel === "none") openBriefing();
     render(true);
     save();
+    ambience();
   } catch (err) {
     loading = false;
     loadError = "This chapter could not load. Your life is safe — try again.";
@@ -446,7 +577,7 @@ async function begin() {
   state = newLife(identity);
   saved = null;
   invalidSave = false;
-  panel = "briefing";
+  openBriefing();
   firstBriefing = true;
   mode = "play";
   await showChapter();
@@ -480,7 +611,8 @@ ui.addEventListener("click", async (event) => {
     case "continue":
       if (saved) {
         state = saved;
-        panel = saved.complete ? "none" : "briefing";
+        if (saved.complete) panel = "none";
+        else openBriefing();
         firstBriefing = false;
         mode = "play";
         await showChapter();
@@ -502,6 +634,7 @@ ui.addEventListener("click", async (event) => {
       sound = !sound;
       prefs();
       cue();
+      ambience();
       if (mode === "play" && panel === "none") refreshHud();
       else render();
       break;
@@ -531,11 +664,30 @@ ui.addEventListener("click", async (event) => {
     case "pause":
     case "journal":
     case "explore":
-    case "briefing":
       panel = action;
       save();
       render(true);
       break;
+    case "briefing":
+      openBriefing(true);
+      save();
+      render(true);
+      break;
+    case "beat":
+      advanceBeat();
+      break;
+    case "beat-all":
+      advanceBeat(true);
+      break;
+    case "beat-go": {
+      const i = Number(target.dataset.value);
+      if (Number.isInteger(i) && i >= 0 && i < beat.list.length && i !== beat.index) {
+        beat = { ...beat, index: i };
+        render();
+        focusBeat();
+      }
+      break;
+    }
     case "tab":
       journalTab = target.dataset.tab ?? "people";
       render();
@@ -546,6 +698,7 @@ ui.addEventListener("click", async (event) => {
       mode = "title";
       panel = "none";
       render(true);
+      ambience();
       void world.showTitle(identity);
       break;
     case "choose":
@@ -680,7 +833,17 @@ window.addEventListener("keydown", (event) => {
     render(true);
     return;
   }
+  if (beatPanels.includes(panel) && (event.key === " " || event.key === "Enter") && !event.repeat) {
+    const el = document.activeElement as HTMLElement | null;
+    const onOtherButton = el?.matches("button,summary,select,input") && !el.matches(".beat");
+    if (!onOtherButton && (!lastBeat() || revealing())) {
+      event.preventDefault();
+      advanceBeat();
+      return;
+    }
+  }
   if (panel === "moment" && /^[1-5]$/.test(event.key) && activeMoment) {
+    if (!lastBeat()) advanceBeat(true);
     const opts = visibleOptions(state, activeMoment);
     const pick = opts[Number(event.key) - 1];
     if (pick) {
@@ -731,6 +894,7 @@ async function boot() {
     ready = true;
     loading = false;
     render();
+    ambience();
   } catch (err) {
     loading = false;
     loadError = "Kitehaven could not load. Check your connection and try again.";

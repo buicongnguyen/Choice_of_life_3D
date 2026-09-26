@@ -34,6 +34,22 @@ import {
   type Identity,
   type Life,
 } from "./core";
+import { wordsHTML } from "./beats";
+import { portraits } from "./portraits";
+
+/** The beat currently shown in a dialog, a reply or a chapter intro. */
+export type BeatState = { list: { text: string; memory?: boolean }[]; index: number };
+/** Beat dots double as a way back: tap one to re-read that part. */
+const dots = (b: BeatState) =>
+  b.list.length > 1
+    ? `<span class="dots">${b.list.map((_, i) => `<button type="button" data-action="beat-go" data-value="${i}" class="${i === b.index ? "on" : i < b.index ? "past" : ""}" aria-label="Part ${i + 1} of ${b.list.length}"${i === b.index ? ' aria-current="step"' : ""}></button>`).join("")}</span>`
+    : "";
+function beatBlock(b: BeatState, full: string) {
+  const cur = b.list[Math.min(b.index, b.list.length - 1)];
+  const last = b.index >= b.list.length - 1;
+  return `<p class="sr-only">${esc(full)}</p>
+   <button type="button" class="beat${cur.memory ? " memory" : ""}${last ? " last" : ""}" data-action="beat" ${last ? 'tabindex="-1"' : 'aria-label="Continue"'}>${cur.memory ? '<span class="memo" aria-hidden="true">↺ You remember</span>' : ""}<span class="line" aria-hidden="true">${wordsHTML(cur.text)}</span>${last ? "" : '<span class="more" aria-hidden="true">▸</span>'}</button>`;
+}
 
 export const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 export const btn = (action: string, label: string, cls = "ghost", extra = "") => `<button type="button" class="${cls}" data-action="${action}" ${extra}>${label}</button>`;
@@ -73,7 +89,8 @@ function portrait(who: string, l: Life, size = "") {
   const p = people[id];
   const colour = who === "you" ? COLOURS[l.identity.colour] : (p?.color ?? "8c5cf0");
   const name = personName(who, l);
-  return `<span class="portrait ${size}" style="--c:#${colour}" aria-hidden="true">${esc(name === "You" ? "★" : name.replace(/^(Ms|Nana) /, "")[0])}</span>`;
+  const img = portraits.get(who === "you" ? "you" : id);
+  return `<span class="portrait ${size}${img ? " photo" : ""}" style="--c:#${colour}" aria-hidden="true">${img ? `<img src="${img}" alt="">` : esc(name === "You" ? "★" : name.replace(/^(Ms|Nana) /, "")[0])}</span>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -162,51 +179,63 @@ export function huntUI(l: Life) {
 // ---------------------------------------------------------------------------
 // panels
 // ---------------------------------------------------------------------------
-export function briefingUI(l: Life, first: boolean) {
+export function briefingUI(l: Life, first: boolean, b: BeatState, reopened: boolean) {
   const ch = chapterOf(l);
-  return `<div class="shade chapter-shade"><section class="briefing" role="dialog" aria-modal="true" aria-labelledby="brief-title">
-   <span class="big-num" aria-hidden="true">${String(l.chapter + 1).padStart(2, "0")}</span>
-   <p class="kicker">Chapter ${l.chapter + 1} of 12 · Age ${ch.age}</p>
-   <h2 id="brief-title" tabindex="-1">${esc(ch.title)}</h2>
-   <p class="place">${esc(ch.place)}</p>
-   <p class="intro">${esc(text(ch.intro, l))}</p>
-   ${driftUI(l)}
-   <div class="brief-goal"><span class="quest-mark">!</span><div><strong>${esc(text(ch.objective, l))}</strong><small>${ch.free > 50 ? "No clock today. There's time for everyone who came." : `You have <b>${ch.free} hours</b> of free time. Each conversation marked … or activity marked ✦ takes one. You can't do everything — choose who gets your time.`}</small></div></div>
-   ${first ? `<ul class="tips"><li><kbd>WASD</kbd> / arrows or tap the ground to walk</li><li><kbd>E</kbd> or <kbd>Space</kbd> to talk and act</li><li>Glowing rings are small discoveries — just walk over them</li><li><b>Go to…</b> walks you anywhere automatically</li></ul>` : ""}
-   <div class="actions">${btn("close", l.log.length && record(l).started ? "Back to the story" : "Begin chapter →", "primary big")}</div>
-  </section></div>`;
+  const last = b.index >= b.list.length - 1;
+  const time = ch.free > 50 ? "No clock today" : `${"☀".repeat(ch.free)} ${ch.free} free hours`;
+  return `<div class="cinema" role="dialog" aria-modal="true" aria-labelledby="brief-title">
+   <div class="bar top" aria-hidden="true"></div><div class="bar bottom" aria-hidden="true"></div>
+   <header class="cine-head"><span class="cine-num" aria-hidden="true">${String(l.chapter + 1).padStart(2, "0")}</span><div>
+    <p class="kicker">Chapter ${l.chapter + 1} of 12 · Age ${ch.age}</p><h2 id="brief-title" tabindex="-1">${esc(ch.title)}</h2><p class="place">${esc(ch.place)}</p></div></header>
+   <div class="cine-text">${beatBlock(b, text(ch.intro, l))}${dots(b)}</div>
+   <footer class="cine-foot">
+    <div class="cine-goal"><span class="quest-mark" aria-hidden="true">!</span><strong>${esc(text(ch.objective, l))}</strong><span class="cine-time" title="Talking to someone marked … or doing an activity marked ✦ takes an hour. The main story (!) is always free.">${time}</span>${driftUI(l)}</div>
+    <div class="cine-actions">${last ? btn("close", reopened ? "Back to the story ▸" : "Begin chapter ▸", "primary big") : `${btn("close", "Skip", "ghost")}${btn("beat", "Continue ▸", "primary big")}`}</div>
+   </footer>
+   ${first && last ? `<ul class="tips" aria-label="How to play"><li><kbd>WASD</kbd> or tap to walk</li><li><kbd>E</kbd> talk / act</li><li><b>!</b> story · <b>…</b> costs an hour · <b>✦</b> activity</li><li>Rings are free finds — walk over them</li></ul>` : ""}
+  </div>`;
 }
 
 /** Bonds that cooled at the last chapter change, told plainly on the chapter card. */
 function driftUI(l: Life) {
   if (!l.drift?.length || !l.chapter) return "";
   const names = l.drift.map((b) => bondName(b, l));
-  return `<p class="drift">💔 Since last chapter: you made no time for ${esc(names.join(" or "))}, and ${names.length > 1 ? "those bonds" : "that bond"} cooled a little.</p>`;
+  return `<span class="drift" title="You made no time for ${esc(names.join(" or "))} last chapter, so ${names.length > 1 ? "those bonds" : "that bond"} cooled a little.">💔 ${esc(names.join(", "))} −1</span>`;
 }
 
-export function momentUI(l: Life, m: Moment) {
+export function momentUI(l: Life, m: Moment, b: BeatState) {
   const who = m.who;
   const id = resolveWho(who, l);
   const role = who === "you" ? "The last festival" : people[id]?.role(l) ?? "";
   const ctx = m.context?.(l);
+  const last = b.index >= b.list.length - 1;
   const opts = visibleOptions(l, m);
-  return `<section class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
-   <header>${portrait(who, l)}<div><span class="kicker ${m.kind}">${m.kind === "main" ? "★ Main story" : "… Free time · 1 hour"}</span><h2 id="dlg-title" tabindex="-1">${esc(text(m.title, l))}</h2><p class="who">${esc(personName(who, l))}${role ? ` · ${esc(role)}` : ""}</p></div>${btn("close", "×", "close", 'aria-label="Not now"')}</header>
-   <div class="dialog-body"><p class="prompt">${esc(text(m.prompt, l))}</p>${ctx ? `<p class="context">${esc(ctx)}</p>` : ""}
-   <div class="options">${opts
-     .map(([o, i], n) => {
-       const open = optionOpen(l, o);
-       return `<button class="option" data-action="choose" data-index="${i}" ${open ? "" : 'disabled aria-disabled="true"'}><span class="num">${n + 1}</span><span class="body"><strong>${esc(text(o.label, l))}</strong><small>${esc(text(o.hint, l))}</small>${open ? `<span class="chips">${chips(effectOf(l, o), l)}</span>` : `<em class="lock">🔒 ${esc(o.need!.why)}</em>`}</span></button>`;
-     })
-     .join("")}</div></div>
+  return `<section class="dialog talk${last ? " choosing" : ""}" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
+   <header>${portrait(who, l)}<div><span class="kicker ${m.kind}">${m.kind === "main" ? "★ Main story" : "… Free time · 1 hour"}</span><h2 id="dlg-title" tabindex="-1">${esc(text(m.title, l))}</h2><p class="who">${esc(personName(who, l))}${role ? ` · ${esc(role)}` : ""}</p></div>${dots(b)}${btn("close", "×", "close", 'aria-label="Not now"')}</header>
+   <div class="dialog-body">${beatBlock(b, [text(m.prompt, l), ctx ?? ""].join(" "))}
+   ${
+     last
+       ? `<div class="options n${opts.length}">${opts
+           .map(([o, i], n) => {
+             const open = optionOpen(l, o);
+             return `<button class="option" data-action="choose" data-index="${i}" style="--n:${n}" ${open ? "" : 'disabled aria-disabled="true"'}><span class="num">${n + 1}</span><span class="body"><strong>${esc(text(o.label, l))}</strong><small>${esc(text(o.hint, l))}</small>${open ? `<span class="chips">${chips(effectOf(l, o), l)}</span>` : `<em class="lock">🔒 ${esc(o.need!.why)}</em>`}</span></button>`;
+           })
+           .join("")}</div>`
+       : `<div class="beat-foot">${btn("beat-all", "Skip to the choice ▸▸", "ghost small")}</div>`
+   }</div>
   </section>`;
 }
 
-export function responseUI(title: string, body: string, effect: Effect, l: Life, note = "", who?: string) {
+export function responseUI(title: string, b: BeatState, full: string, effect: Effect, l: Life, note = "", who?: string) {
+  const last = b.index >= b.list.length - 1;
   return `<section class="dialog response" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
-   <header>${who ? portrait(who, l) : `<span class="portrait" style="--c:#2ed3b0" aria-hidden="true">✦</span>`}<div><span class="kicker">What happened</span><h2 id="dlg-title" tabindex="-1">${esc(title)}</h2></div></header>
-   <div class="dialog-body"><p class="reply">${esc(body)}</p>${Object.keys(effect).length ? `<div class="chips big">${chips(effect, l)}</div>` : ""}${note ? `<p class="note">${esc(note)}</p>` : ""}
-   <div class="actions">${btn("close", "Continue →", "primary")}</div></div>
+   <header>${who ? portrait(who, l) : `<span class="portrait" style="--c:#2ed3b0" aria-hidden="true">✦</span>`}<div><span class="kicker">What happened</span><h2 id="dlg-title" tabindex="-1">${esc(title)}</h2></div>${dots(b)}</header>
+   <div class="dialog-body">${beatBlock(b, full)}
+   ${
+     last
+       ? `<div class="outcome">${Object.keys(effect).length ? `<div class="chips big">${chips(effect, l)}</div>` : ""}${note ? `<p class="note">${esc(note)}</p>` : ""}${btn("close", "Continue ▸", "primary")}</div>`
+       : `<div class="beat-foot">${btn("beat-all", "Skip ▸▸", "ghost small")}${btn("beat", "Continue ▸", "primary")}</div>`
+   }</div>
   </section>`;
 }
 

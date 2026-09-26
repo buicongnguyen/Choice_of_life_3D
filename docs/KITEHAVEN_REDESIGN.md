@@ -1,4 +1,4 @@
-# Choice of Life: Kitehaven — evaluation and redesign (1.0.0)
+# Choice of Life: Kitehaven — evaluation and redesign (1.0.0, 1.1.0)
 
 This release replaces the 0.3 "little world of choices" with a new story, new rules,
 twelve new Blender dioramas, new characters, a new renderer look and a new interface.
@@ -122,7 +122,7 @@ with you at the end?**
 
 | Check | Result |
 | --- | --- |
-| `npm test` (23 tests) | Rules, save replay and tamper rejection, the free-time budget, gates, the vote, activities, callbacks, all six endings reachable, 260 random lives finishing and replaying exactly, content integrity against the Blender layout, and navigation reachability for every anchor in every workplace fit-out |
+| `npm test` (25 tests) | Rules, save replay and tamper rejection, the free-time budget, gates, the vote, activities, callbacks, all six endings reachable, 260 random lives finishing and replaying exactly, content integrity against the Blender layout, and navigation reachability for every anchor in every workplace fit-out |
 | `node scripts/smoke.mjs` (13 checks, real UI) | Customise and begin; walk to Nana and choose a kite; a hunt started, walked and completed; free time running out; a discovery; reload and continue; the golden gate, with the new chapter starting at its spawn; the journal; the kite game; the planner closed and reopened mid-plan; the last kite and the ending; a finished life reopening on its ending; the phone layout with light graphics. Passed against both the dev server and `vite preview` of `dist/`, with no page errors |
 | `node scripts/capture.mjs` | All twelve chapters opened from real saves, with no page errors |
 | `node scripts/perf.mjs` | RTX 4080 (ANGLE D3D11), 1280×800: 60 FPS locked in every chapter measured, p95 16.8 ms. Full detail uses 126–380 draw calls and 133k–504k triangles including the shadow pass. Light mode uses 61–192 calls and 29k–86k triangles |
@@ -148,3 +148,56 @@ Real-phone profiling has not been done; the numbers above come from desktop emul
 - Portraits rendered from the 3D models (dialogs use coloured initials).
 - A dedicated non-visual play mode. All UI is keyboard-reachable and labelled, but the 3D
   world itself is not narrated.
+
+
+## 5. 1.1.0: less text on screen, and more life in it
+
+### The problem on PC screens
+An audit at 1366×768 (a typical laptop) and 1920×1080 (`scripts/audit-ui.mjs`,
+`npx tsx scripts/textstats.mts`) found three problems:
+
+- The biggest main-story dialog put **158 words** on screen at once and was **507 px tall**.
+  Its third choice ("Turn it down") sat below the fold, so you had to scroll inside the dialog
+  to discover it.
+- Chapter cards ran to **125 words** and repeated the same free-time rules paragraph in every
+  chapter.
+- Replies were a single 60–90-word block. The dialog, the quest card and the action button
+  stacked up over the characters you were talking to.
+
+### What changed
+- **Beats.** Prompts, replies and chapter intros arrive a few lines at a time: at most
+  about 34 words, split only at sentence ends and never inside a quotation. Words fade in; click,
+  tap, Space or Enter to continue; "Skip to the choice" jumps ahead; the dots let you step back
+  and re-read. Spoken lines stand out from narration. A flashback line ("↺ You remember…")
+  gets its own beat. Screen readers still get the full text at once.
+- **Choices side by side.** Options sit in a row under the last beat, so every choice is
+  visible without scrolling. The Voss dialog with all three choices is now 344 px tall. Replies
+  end with a single outcome row: the effect chips, a short note and Continue.
+- **Cinematic chapter intros.** Letterbox bars, a big chapter number and title over the
+  camera's fly-in, and the intro in a subtitle box. The goal, free time and any cooled bonds
+  sit in one compact line. The rules explanation appears once, in chapter 1.
+- **A quieter screen while you talk.** The quest card, controls, chapter dots and the bottom
+  bar step aside during conversations. Discoveries show as a short toast at the top.
+
+### New life in the presentation
+- **Real portraits.** Each speaker's face is rendered from their own 3D model, in their current
+  look and age, lit by a soft studio light.
+- **Rewards you can see.** Stat and bond changes float up from your character, and hearts
+  burst when a bond grows.
+- **Speech bubbles.** Small talk appears above people's heads instead of in a box.
+- **A miniature lens.** Tilt-shift blur and a soft vignette (full detail only) make each
+  diorama read as a model town. The focus follows whoever you're talking to.
+- **Sound** (off by default): each person has their own soft "voice" murmur as their words
+  appear, plus a synthesised ambience of surf, wind, rain or a quiet room to suit the chapter.
+
+### Ideas for later
+1. A music-box theme that grows with you: a lullaby in the nursery, a brass band at the vote,
+   and the same tune on the clifftop at the end.
+2. A lives album: remember every ending you've reached, with the "who came to the last
+   festival" photo as a shareable card.
+3. Expressions: happy, sad and surprised faces (eyebrow and mouth shapes) matched to each line's mood.
+4. Kite workshop: decorate your kite with patterns earned from keepsakes; it appears in every
+   chapter's sky.
+5. A living town: townsfolk walking their own routes, with seasons and fireworks at the festival.
+6. A "what if?" branch map in the journal, showing the paths not taken.
+7. Localisation: the beat system makes translated text easier to fit.

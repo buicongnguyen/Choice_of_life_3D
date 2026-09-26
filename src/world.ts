@@ -5,6 +5,11 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { HorizontalTiltShiftShader } from "three/addons/shaders/HorizontalTiltShiftShader.js";
+import { VerticalTiltShiftShader } from "three/addons/shaders/VerticalTiltShiftShader.js";
+import { VignetteShader } from "three/addons/shaders/VignetteShader.js";
+import { portraits } from "./portraits";
 import { Stage } from "./lighting";
 import { modelURL } from "./asset-url";
 import { graphicsProfile, type GraphicsQuality } from "./graphics";
@@ -65,6 +70,8 @@ export class World {
   private stage: Stage;
   private composer?: EffectComposer;
   private bloom?: UnrealBloomPass;
+  private tiltH?: ShaderPass;
+  private tiltV?: ShaderPass;
   private sceneRoot = new T.Group();
   private cast = new T.Group();
   private fx = new T.Group();
@@ -107,6 +114,8 @@ export class World {
   private titleKite?: T.Object3D;
   private release?: T.Object3D;
   active = false;
+  /** Quest markers and name labels step aside during the chapter's opening shot. */
+  hideMarkers = false;
   reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
   speed = 2.8;
   onInteract: (place: Place) => void = () => {};
@@ -134,6 +143,15 @@ export class World {
       // Threshold above lit albedo (~1.0) so only emissive lamps, windows and string lights glow.
       this.bloom = new UnrealBloomPass(new T.Vector2(256, 256), 0.35, 0.5, 1.35);
       this.composer.addPass(this.bloom);
+      // Tilt-shift: a gentle blur away from the focus row makes the dioramas read as miniatures.
+      this.tiltH = new ShaderPass(HorizontalTiltShiftShader);
+      this.tiltV = new ShaderPass(VerticalTiltShiftShader);
+      this.composer.addPass(this.tiltH);
+      this.composer.addPass(this.tiltV);
+      const vignette = new ShaderPass(VignetteShader);
+      vignette.uniforms.offset.value = 1.05;
+      vignette.uniforms.darkness.value = 1.05;
+      this.composer.addPass(vignette);
       this.composer.addPass(new OutputPass());
     }
     this.observer = new ResizeObserver(() => this.resize());
@@ -370,6 +388,7 @@ export class World {
     this.intro = this.reducedMotion ? 0 : 1;
     this.resize();
     this.render();
+    this.makePortraits();
     // Warm the next chapter's scenery on fast connections.
     const next = chapters[state.chapter + 1];
     if (next && !this.graphics.low) void this.load(next.scene).catch(() => {});
@@ -910,6 +929,7 @@ export class World {
     if (!w || !h) return;
     this.renderer.setSize(w, h);
     this.composer?.setSize(w, h);
+    this.tune(w, h);
     const aspect = w / h;
     this.camera.aspect = aspect;
     this.camera.fov = aspect < 0.75 ? 44 : aspect < 1.2 ? 36 : 30;
@@ -949,6 +969,78 @@ export class World {
       if (q.marker) q.marker.visible = !id;
     }
     this.resize();
+  }
+
+  /** Tilt-shift strength and focus row: the focus follows the subject above any dialog. */
+  private tune(w: number, h: number) {
+    if (!this.tiltH || !this.tiltV) return;
+    const blur = this.titleMode ? 1.6 : this.focusPoint ? 2.2 : 1.8;
+    this.tiltH.uniforms.h.value = blur / w;
+    this.tiltV.uniforms.v.value = blur / h;
+    const focus = this.inset > 0 && this.focusPoint ? (this.inset + (h - this.inset) * 0.5) / h : this.titleMode ? 0.42 : 0.5;
+    this.tiltH.uniforms.r.value = focus;
+    this.tiltV.uniforms.r.value = focus;
+  }
+
+  /** Screen position (CSS px, relative to the window) of someone's head, for popups and bubbles. */
+  screenOf(who: string, above = 0.35): { x: number; y: number } | null {
+    const actor = who === "you" ? this.player : this.actors.find((a) => a.who === who);
+    if (!actor) return null;
+    const v = actor.root.position.clone();
+    v.y += actor.height + above;
+    v.project(this.camera);
+    if (v.z > 1) return null;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height };
+  }
+
+  /**
+   * Portraits from the real 3D characters: each head is rendered once per chapter into a
+   * corner of the canvas and copied out before the next frame, so no second context is needed.
+   */
+  private makePortraits() {
+    portraits.clear();
+    const all = [...this.actors, ...(this.player ? [this.player] : [])];
+    if (!all.length) return;
+    const size = 160;
+    const pr = this.renderer.getPixelRatio();
+    const cam = new T.PerspectiveCamera(24, 1, 0.1, 60);
+    const out = document.createElement("canvas");
+    out.width = out.height = size;
+    const g = out.getContext("2d")!;
+    const fxWasVisible = this.fx.visible;
+    this.fx.visible = false;
+    // A soft studio key that travels with the portrait camera, so night scenes still show a face.
+    const studio = new T.PointLight(0xfff1e0, 3.2, 4, 1.5);
+    this.scene.add(studio);
+    this.scene.updateMatrixWorld(true);
+    for (const a of all) {
+      const eyes = a.eyes ?? a.head;
+      if (!eyes) continue;
+      const face = eyes.getWorldPosition(new T.Vector3());
+      const fwd = new T.Vector3(Math.sin(a.root.rotation.y), 0, Math.cos(a.root.rotation.y));
+      const target = face.clone().addScaledVector(fwd, -0.12).add(new T.Vector3(0, -0.02, 0));
+      cam.position.copy(target).addScaledVector(fwd, 1.35 * (a.root.scale.x || 1)).add(new T.Vector3(0, 0.16, 0));
+      cam.lookAt(target);
+      cam.updateMatrixWorld();
+      studio.position.copy(cam.position).add(new T.Vector3(0.3, 0.4, 0));
+      this.renderer.setScissorTest(true);
+      this.renderer.setScissor(0, 0, size, size);
+      this.renderer.setViewport(0, 0, size, size);
+      this.renderer.render(this.scene, cam);
+      const c = this.renderer.domElement;
+      g.clearRect(0, 0, size, size);
+      g.drawImage(c, 0, c.height - size * pr, size * pr, size * pr, 0, 0, size, size);
+      portraits.set(a.who, out.toDataURL("image/webp", 0.85));
+    }
+    this.scene.remove(studio);
+    studio.dispose();
+    this.renderer.setScissorTest(false);
+    const w = this.host.clientWidth,
+      h = this.host.clientHeight;
+    this.renderer.setViewport(0, 0, w, h);
+    this.fx.visible = fxWasVisible;
+    this.render();
   }
 
   /** Let the person you're talking to react (nod + mouth) after a choice. */
@@ -1145,9 +1237,10 @@ export class World {
         p.spin.rotation.y = t * 1.2 + p.place.index;
         p.spin.position.y = 0.38 + Math.sin(t * 2.2 + p.place.index) * 0.07;
       }
+      if (p.marker) p.marker.visible = !this.conversation && !this.hideMarkers;
       if (p.marker && !this.reducedMotion) p.marker.position.y += Math.sin(t * 3 + p.place.index) * 0.0025;
       if (p.ring) (p.ring.material as T.MeshBasicMaterial).opacity = 0.55 + Math.sin(t * 3 + p.place.index) * 0.3;
-      if (p.label) p.label.visible = !this.conversation && (p.place.id === showLabel || (p.place.kind === "activity" && !this.lastNearby) || p.place.kind === "exit");
+      if (p.label) p.label.visible = !this.conversation && !this.hideMarkers && (p.place.id === showLabel || (p.place.kind === "activity" && !this.lastNearby) || p.place.kind === "exit");
     }
     // weather
     if (this.weather) {
@@ -1218,6 +1311,13 @@ export class World {
     if (Math.abs(px - this.inset) < 2) return;
     this.inset = px;
     this.resize();
+  }
+
+  /** Heart burst above someone's head (a bond grew); purely visual. */
+  celebrate(who: string) {
+    const actor = who === "you" ? this.player : this.actors.find((a) => a.who === who);
+    if (!actor || this.reducedMotion) return;
+    actor.wave = 1.2;
   }
 
   diagnostics() {
