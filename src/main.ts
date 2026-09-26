@@ -4,6 +4,7 @@ import "./features.css";
 import { World, type Place } from "./world";
 import { graphicsQuality, type GraphicsQuality } from "./graphics";
 import { KiteGame } from "./kite-game";
+import { reloadAfterSaving } from "./persistence";
 import { chapters, people, text, kiteColours, resolveWho, personName, type Moment, type KiteGrade } from "./content";
 import { u, pickLang, lang, type Lang, type UIKey } from "./i18n";
 import { applyOverlay, type Overlay } from "./localize";
@@ -145,9 +146,12 @@ try {
 // small services
 // ---------------------------------------------------------------------------
 function prefs(extra: Record<string, unknown> = {}) {
+  let persisted = true;
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify({ sound, music, reduced, pace, largeText, closeups, graphics, kiteAssist, lang, ...extra }));
-  } catch {}
+  } catch {
+    persisted = false;
+  }
   world.reducedMotion = reduced;
   setEnabled(sound);
   setMusicOn(music);
@@ -155,12 +159,14 @@ function prefs(extra: Record<string, unknown> = {}) {
   document.body.classList.toggle("reduced", reduced);
   document.body.classList.toggle("large-text", largeText);
   document.body.dataset.graphics = graphics;
+  return persisted;
 }
 prefs();
 
 const saveText = () => (storageIssue ? u("hud.saveUnavailable") : u("hud.saved"));
 function save(updatePosition = true) {
-  if (mode === "title") return;
+  // Returning to the title must not hide a previous failed progress save.
+  if (mode === "title") return !storageIssue;
   if (updatePosition && !loading) state.position = { x: world.playerPosition.x, z: world.playerPosition.z };
   try {
     localStorage.setItem(SAVE_KEY, serialise(state));
@@ -172,6 +178,7 @@ function save(updatePosition = true) {
   if (noteChoices(album, state)) saveAlbum();
   const el = ui.querySelector("#save-status");
   if (el) el.textContent = saveText();
+  return !storageIssue;
 }
 
 let toastTimer = 0;
@@ -870,15 +877,24 @@ ui.addEventListener("pointerdown", (e) => {
   }
 });
 
+function changeReloadingSetting(input: HTMLInputElement, current: string, extra: Record<string, unknown>) {
+  ui.querySelector("[data-reload-error]")?.remove();
+  if (reloadAfterSaving(save, () => prefs({ ...extra, setupDraft: mode === "title" ? identity : undefined }), () => location.reload())) return;
+  input.value = current;
+  const warning = document.createElement("p");
+  warning.className = "note warn";
+  warning.dataset.reloadError = "";
+  warning.setAttribute("role", "alert");
+  warning.textContent = u("settings.reloadBlocked");
+  (input.closest("label") ?? input).insertAdjacentElement("afterend", warning);
+}
+
 ui.addEventListener("change", (event) => {
   const input = event.target as HTMLInputElement;
   if (input.name === "graphics") {
     const next = graphicsQuality(input.value, phone);
     if (next === graphics) return;
-    save();
-    graphics = next;
-    prefs({ setupDraft: mode === "title" ? identity : undefined });
-    location.reload();
+    changeReloadingSetting(input, graphics, { graphics: next });
     return;
   }
   if (input.name === "pace") {
@@ -888,9 +904,7 @@ ui.addEventListener("change", (event) => {
   if (input.name === "lang") {
     const next = pickLang(input.value);
     if (next === lang) return;
-    save();
-    prefs({ lang: next, setupDraft: mode === "title" ? identity : undefined });
-    location.reload();
+    changeReloadingSetting(input, lang, { lang: next });
   }
 });
 // Remember whether "Make it yours" is open so re-rendering the title never collapses it.
@@ -997,6 +1011,7 @@ window.addEventListener("keyup", (event) => world.key(event.key.length === 1 ? e
 
 function suspend() {
   world.clearInput();
+  kite?.pause();
   save();
   if (mode === "play" && panel === "none" && !loading) {
     panel = "pause";

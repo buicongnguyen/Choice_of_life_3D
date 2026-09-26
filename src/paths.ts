@@ -3,7 +3,7 @@
  * other lives on this device picked. Built from the life itself (replay-safe) and the album.
  */
 import { chapters, text } from "./content";
-import { mainMoment, optionOpen, type Life } from "./core";
+import { act, mainMoment, newLife, optionOpen, type Life } from "./core";
 import type { Album } from "./album";
 
 export type PathStatus = "chosen" | "other" | "open" | "locked" | "hidden";
@@ -16,23 +16,32 @@ export interface PathRow {
 }
 
 export function pathRows(l: Life, album: Album): PathRow[] {
+  // Rebuild each decision's context once; later ageing, spending or relationships
+  // must not rewrite what was possible when that choice was offered.
+  const decisions = new Map<string, Life>();
+  let cursor = newLife(l.identity);
+  for (const action of l.log) {
+    const m = mainMoment(cursor);
+    if (action.startsWith(`talk:${m.id}:`)) decisions.set(m.id, cursor);
+    cursor = act(cursor, action);
+  }
   return chapters.map((ch, c) => {
     const m = ch.moments.find((x) => x.kind === "main")!;
     const reached = c < l.chapter || (c === l.chapter && Object.hasOwn(l.done, m.id)) || l.complete;
-    const view = { ...l, chapter: c };
+    const view = decisions.get(m.id) ?? { ...l, chapter: c };
     const picked = l.done[m.id];
     const others = album.choices[m.id] ?? [];
     return {
       chapter: c,
       id: m.id,
-      title: reached ? text(mainMoment(view).title, l) : "",
+      title: reached ? text(m.title, view) : "",
       reached,
       options: m.options.map((o, i) => {
-        const label = text(o.label, l);
+        const label = text(o.label, view);
         if (picked === i) return { label, status: "chosen" as const };
         if (others.includes(i)) return { label, status: "other" as const };
-        if (o.show && !o.show(l)) return { label, status: "hidden" as const };
-        return { label, status: optionOpen(l, o) ? ("open" as const) : ("locked" as const) };
+        if (o.show && !o.show(view)) return { label, status: "hidden" as const };
+        return { label, status: optionOpen(view, o) ? ("open" as const) : ("locked" as const) };
       }),
     };
   });

@@ -8,7 +8,8 @@ import type { KiteGrade } from "./content";
 export class KiteGame {
   private ctx: CanvasRenderingContext2D;
   private raf = 0;
-  private last = 0;
+  private last: number | null = null;
+  private paused = false;
   private t = 0;
   private tension = 0.5;
   private height = 0.35;
@@ -40,15 +41,33 @@ export class KiteGame {
     window.addEventListener("pointercancel", this.up);
     window.addEventListener("keydown", this.key);
     window.addEventListener("keyup", this.key);
+    window.addEventListener("blur", this.pause);
+    window.addEventListener("focus", this.resume);
+    document.addEventListener("visibilitychange", this.visibility);
+    if (document.hidden || !document.hasFocus()) this.pause();
     this.raf = requestAnimationFrame(this.frame);
   }
 
   hold(on: boolean) {
-    this.holding = on;
+    this.holding = on && !this.paused && !this.finished && !this.disposed;
   }
+  pause = () => {
+    this.paused = true;
+    this.holding = false;
+    this.last = null;
+  };
+  private resume = () => {
+    if (this.disposed || document.hidden || !document.hasFocus()) return;
+    this.paused = false;
+    this.last = null;
+  };
+  private visibility = () => {
+    if (document.hidden) this.pause();
+    else this.resume();
+  };
   private down = (e: PointerEvent) => {
     e.preventDefault();
-    this.holding = true;
+    this.hold(true);
   };
   private up = () => {
     this.holding = false;
@@ -56,7 +75,7 @@ export class KiteGame {
   private key = (e: KeyboardEvent) => {
     if (e.key === " " || e.key === "ArrowUp") {
       e.preventDefault();
-      this.holding = e.type === "keydown";
+      this.hold(e.type === "keydown");
     }
   };
   private band() {
@@ -64,10 +83,15 @@ export class KiteGame {
   }
 
   private frame = (ms: number) => {
-    const dt = Math.min(0.05, (ms - this.last) / 1000 || 0);
+    if (this.disposed) return;
+    const dt = this.last === null ? 0 : Math.max(0, Math.min(0.05, (ms - this.last) / 1000));
     this.last = ms;
-    if (!this.finished) this.simulate(dt);
-    this.draw();
+    if (!this.paused) {
+      if (!this.finished) this.simulate(dt);
+      // onDone may dispose the game and remove its canvas.
+      if (this.disposed) return;
+      this.draw();
+    }
     if (!this.disposed && (!this.finished || this.sparkles.length))
       this.raf = requestAnimationFrame(this.frame);
   };
@@ -243,5 +267,8 @@ export class KiteGame {
     window.removeEventListener("pointercancel", this.up);
     window.removeEventListener("keydown", this.key);
     window.removeEventListener("keyup", this.key);
+    window.removeEventListener("blur", this.pause);
+    window.removeEventListener("focus", this.resume);
+    document.removeEventListener("visibilitychange", this.visibility);
   }
 }

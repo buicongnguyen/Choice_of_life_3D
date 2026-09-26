@@ -121,6 +121,24 @@ test("paths show your choice, the ones not taken, and other lives' choices", () 
   assert.equal(ex.total, chapters.reduce((n, c) => n + c.moments.find((m) => m.kind === "main")!.options.length, 0));
 });
 
+test("paths preserve historical eligibility after ageing changes health", () => {
+  let l = newLife(id);
+  for (let c = 0; c < chapters.length; c++) {
+    const m = mainMoment(l);
+    if (c === 4) assert.equal(optionOpen(l, m.options[0]), true);
+    if (c === 10) assert.equal(optionOpen(l, m.options[2]), true);
+    const first = visibleOptions(l, m).find(([o]) => optionOpen(l, o))![1];
+    l = act(l, talkAction(m.id, c === 4 ? 1 : first));
+    l = act(l, "next");
+  }
+  assert.ok(l.complete && l.stats.health < 30);
+  const rows = pathRows(l, emptyAlbum());
+  assert.equal(rows[4].options[0].status, "open", "saving the boat was available when offered");
+  assert.equal(rows[10].options[2].status, "open", "travelling was available before ageing");
+  assert.equal(rows[5].options[2].status, "locked", "an unavailable road stays locked");
+  assert.deepEqual(pathRows(parseLife(serialise(l))!, emptyAlbum()), rows);
+});
+
 test("moods: every moment id in the mood table exists, replies follow the effect", () => {
   const ids = new Set(chapters.flatMap((c) => c.moments.map((m) => m.id)));
   for (const c of chapters) for (const m of c.moments) assert.ok(MOODS.includes(askingMood(m.id)));

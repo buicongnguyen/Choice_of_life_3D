@@ -1,6 +1,7 @@
 import type { UIKey } from "../../i18n";
 
 const ui: Record<UIKey, string> = {
+  "settings.reloadBlocked": "변경 사항을 저장하지 못했어요. 게임은 그대로 열려 있으니 이 탭을 닫지 말고 나중에 다시 시도해 주세요.",
   // title
   "title.kicker": "작은 마을에서 보내는 한평생",
   "title.game": "인생의 선택",

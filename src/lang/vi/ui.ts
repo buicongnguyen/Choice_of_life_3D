@@ -2,6 +2,7 @@
 import type { UIKey } from "../../i18n";
 
 const ui: Record<UIKey, string> = {
+  "settings.reloadBlocked": "Không thể lưu thay đổi này. Trò chơi vẫn đang mở; hãy giữ tab này và thử lại sau.",
   // title
   "title.kicker": "Trọn một đời người trong một thị trấn nhỏ",
   "title.game": "Lựa Chọn Cuộc Đời",

@@ -239,6 +239,7 @@ export const EN_UI = {
   "pause.title": "Paused",
   "pause.saved": "Your life is saved on this device.",
   "pause.noSave": "Saving is unavailable. Keep this tab open to keep playing.",
+  "settings.reloadBlocked": "Couldn't save this change. Your game is still open; keep this tab open and try again later.",
   "pause.resume": "Resume",
   "pause.readCard": "Read the chapter card",
   "pause.textLarge": "Text: large",

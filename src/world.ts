@@ -164,7 +164,16 @@ export class World {
   active = false;
   /** Quest markers and name labels step aside during the chapter's opening shot. */
   hideMarkers = false;
-  reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  private motionReduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  get reducedMotion() {
+    return this.motionReduced;
+  }
+  set reducedMotion(value: boolean) {
+    this.motionReduced = value;
+    // Apply immediately to effects already created for the current chapter.
+    if (this.weather) this.weather.obj.visible = !value;
+    if (this.fireworks) this.fireworks.obj.visible = !value;
+  }
   speed = 2.8;
   onInteract: (place: Place) => void = () => {};
   onCollect: (place: Place) => void = () => {};
@@ -1407,7 +1416,7 @@ export class World {
       if (p.label) p.label.visible = !this.conversation && !this.hideMarkers && (p.place.id === showLabel || (p.place.kind === "activity" && !this.lastNearby) || p.place.kind === "exit");
     }
     // weather
-    if (this.weather) {
+    if (this.weather && !this.reducedMotion) {
       const pos = this.weather.obj.geometry.getAttribute("position") as T.BufferAttribute;
       const arr = pos.array as Float32Array;
       const cx = this.camTarget.x,
@@ -1656,7 +1665,7 @@ export class World {
     }
     // fireworks
     const f = this.fireworks;
-    if (f) {
+    if (f && !this.reducedMotion) {
       f.next -= adt;
       if (f.next <= 0) {
         this.burst(f);
