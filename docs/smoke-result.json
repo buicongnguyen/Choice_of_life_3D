@@ -1,73 +1,20 @@
 {
-  "base": "http://127.0.0.1:4194/",
-  "errors": [],
-  "desktop": {
-    "mode": "ending",
-    "panel": "none",
-    "loading": false,
-    "chapter": 11,
-    "complete": true,
-    "choices": 24,
-    "discoveries": 1,
-    "render": {
-      "drawCalls": 260,
-      "triangles": 112852,
-      "position": {
-        "x": 0,
-        "z": 2.6
-      },
-      "models": [
-        "male",
-        "female",
-        "baby",
-        "cat",
-        "home",
-        "blanket",
-        "rattle",
-        "coins",
-        "apple",
-        "boat",
-        "school",
-        "book",
-        "ball",
-        "letter",
-        "campus",
-        "plant",
-        "office",
-        "town",
-        "garden",
-        "tin"
-      ],
-      "playerVisible": true
-    }
-  },
-  "mobile": {
-    "mode": "play",
-    "panel": "pause",
-    "loading": false,
-    "chapter": 0,
-    "complete": false,
-    "choices": 1,
-    "discoveries": 0,
-    "render": {
-      "drawCalls": 202,
-      "triangles": 61466,
-      "position": {
-        "x": -2.0999872005080507,
-        "z": 0.5789828776833207
-      },
-      "models": [
-        "male",
-        "female",
-        "baby",
-        "cat",
-        "home",
-        "blanket",
-        "rattle",
-        "coins"
-      ],
-      "playerVisible": true
-    }
-  },
-  "result": "pass"
+  "at": "2026-09-26T04:57:54.146Z",
+  "base": "http://127.0.0.1:4197/",
+  "checks": [
+    "title → customise → begin a new life → chapter card",
+    "walk to Nana June, choose the first kite, the main story is free",
+    "the first-steps hunt: start costs an hour, three items found by walking, keepsake awarded",
+    "free time runs out: Dad waves, and the moment stays closed",
+    "a discovery is picked up by walking over it",
+    "reload + Continue restores the same life from its action log",
+    "the golden gate leads to chapter 2, starting at the new scene's spawn",
+    "journal: people, keepsakes and the story so far",
+    "the kite game opens, responds to holding the line, and can be skipped with a fair result",
+    "the planner: close and reopen mid-plan, three blocks, undo, commit",
+    "the last kite, the golden gate and a full ending",
+    "a finished life reopens on its ending, not on the last chapter card",
+    "phone: light graphics by default, touch pad, the dialog fits a 390×844 screen"
+  ],
+  "errors": []
 }

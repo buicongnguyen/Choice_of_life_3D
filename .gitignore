@@ -5,3 +5,5 @@ art/*.blend1
 docs/captures/
 test-results/
 *.log
+__pycache__/
+*.pyc

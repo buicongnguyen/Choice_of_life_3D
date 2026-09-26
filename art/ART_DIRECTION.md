@@ -1,24 +1,47 @@
-# Crafted realism — 0.2.0 art pass
+# Kitehaven art direction
 
-The target is a more believable stylized miniature world, not photorealism or a claim of AAA production scale. Preserve the readable isometric view and cute cast while applying professional asset principles: silhouette first, plausible construction, differentiated materials, restrained detail and consistent lighting.
+**Bar:** toy dioramas with the finish of a Nintendo first-party game: chunky forms,
+generous bevels, saturated glossy colour, readable silhouettes and lots of cheerful dressing.
+It is a quality bar only. Every model here is original and procedurally authored.
 
-## What changes
+## Principles
+- **Vivid and warm, never pastel.** Sun yellow, coral, sea blue, grass green, candy stripes.
+  Night keeps a deep blue sky and black-blue water; the lamps carry the colour.
+- **One town, twelve places.** Each chapter has its own diorama with its own silhouette. The
+  harbour backdrop ties them together and shows the pier in the state your choices left it.
+- **Chunky toy people.** Big heads, short limbs, glossy eyes with highlights, rounded shoes.
+  They age with you: baby, kid, adult, elder.
+- **Colour lives in the vertices.** Per-face colour with baked ambient occlusion; materials only
+  describe the finish (Matte, Satin, Gloss, Metal, Glass, Water, Glow, and recolourable Skin,
+  Hair, Top, Bottom, Shoes, Accent and Kite).
 
-- Furniture: upholstered sofa with separate padded seats, piping, arms and feet; framed cot; desks with structural aprons, inset tops and hardware; slatted benches.
-- Rooms: staggered wood boards with grain, layered window frames and sills, fabric curtains, detailed computer workstations, architectural trim and roofing.
-- Outdoors: tapered pots with soil and rim, shaped leaves with stems, branching trunks, clustered foliage, fountain basin/rim/water, stone and timber material response.
-- Collectibles: lobed apple and curved leaf, cloth folds/stitching, bound book with individual page edges, rolled-edge tin and latch, metallic coins with raised rims, a curved toy boat and triangular sail, envelope folds/wax seal, a ring rattle and a seamed ball.
-- People: retain distinct male/female/baby bases and stable rig names. Improve garment silhouettes, collars, seams, hands, layered hair, eyes, eyebrows, curved smiles and shoes. No adult anatomy changes are applied to the baby.
-- Cat: shaped ears, muzzle, eyes, whiskers and a curved tail.
-- Surfaces: embedded deterministic small PBR texture maps for wood, woven cloth, plaster and stone; independent metal, ceramic, skin and water response. Recolorable clothing/skin/hair retain neutral texture modulation.
-- Lighting: softer calibrated illumination and a local reflection environment; no downloaded HDRIs, external models or runtime asset service.
+## Pipeline
+```sh
+# full + phone detail, layout.json and manifest.json (≈30 s)
+.tools/blender-4.5.0-windows-x64/blender.exe --background --factory-startup --python art/kitehaven/build.py
+# a subset (layout and manifest are merged)
+... --python art/kitehaven/build.py -- --only pier,props
+# review renders in Eevee (lineup, one scene, or all)
+... --python art/kitehaven/run_preview.py -- lineup out.png
+... --python art/kitehaven/run_preview.py -- all out-folder
+```
 
-## Constraints
+- `kit.py`: primitives (bevelled boxes, lathes, capsules, tubes, extrusions, subdivided grids,
+  faceted rocks), a transform stack, vertex-colour materials, the baked AO ray tracer, and Draco
+  GLB export.
+- `pieces.py`: houses, trees, fences, stalls, bunting, kites, boats, a lighthouse, rooms,
+  furniture, and painterly patterns (planks, tiles, cobbles, meadows).
+- `characters.py`: the four bodies, eight hairstyles and accessories.
+- `scenes.py`: the twelve dioramas, the harbour backdrop and the props pack.
+- `build.py`: builds everything and **fails** if an anchor is off the walkable ground, inside
+  furniture or unreachable from the spawn point.
 
-Keep the original map bounds, ground heights, spawn, object interaction positions, stage scales, and animation pivots. Update Blender and runtime collision metadata together if a ground footprint changes. Export the actual GLBs used by the game, not only a showcase render. Merge static parts by material, and articulated parts by material plus rig parent, to control draw calls. Keep textures small and embedded so Pages requires no external art hosting.
-
-## Review
-
-Rebuild all twenty assets in Blender. Inspect the nursery, outdoor scene, adult character and collectibles in the actual Three.js renderer. Check representative mobile framing and movement after export. Run the existing short logic/build checks, commit the Blender sources and generated GLBs, push over SSH and confirm the live release SHA.
-
-Future work: hand-sculpted characters, a full clothing wardrobe, authored skeletal/facial animation, unique rooms per profession and large-scale texture baking. Those are separate production tasks, not features silently implied by this pass.
+## Runtime contract (see `src/world.ts`)
+- Walkable ground is x ∈ [−5.85, 5.85], z ∈ [−4.05, 4.05] at y = 0 in every scene.
+- Anchors: `spawn`, `exit`, `act`, `npc0…npc5`, `find0…find2`, `hunt0…hunt3`.
+- Colliders are world-space boxes. Workplace colliders carry a `variant` (`studio`,
+  `workshop`, `clinic`).
+- Animated nodes by prefix: `Spin_*`, `Sway_*`, `Bob_*`. Variants: `Var_*` (workplace),
+  `Pier_old`, `Pier_ruined`, `Pier_restored`, `Marina` (harbour).
+- Characters: `Body`, `Head`, `Eyes` (blink), `Mouth_smile` / `Mouth_open` (talking), `ArmL`,
+  `ArmR`, `LegL`, `LegR`. `Hair_<style>` and `Acc_<item>` group nodes are shown or hidden.

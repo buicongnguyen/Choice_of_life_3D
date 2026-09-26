@@ -1,232 +1,276 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chapters } from "./content";
+import { allies, chapters, type KiteGrade, type Moment } from "./content";
 import {
+  act,
+  canStartActivity,
+  canTalk,
+  chapterOf,
+  effectOf,
+  ending,
+  freeTime,
+  keepsakes,
+  mainMoment,
+  momentsOf,
   newLife,
-  choose,
-  discover,
-  hazard,
-  advance,
+  optionOpen,
   parseLife,
-  chapterDone,
-  biography,
-  perform,
-  undoActivity,
-  assistActivity,
-  meet,
-} from "./core";
-import {
-  activity,
   record,
-  conversation,
-  scholarship,
-  boatEnding,
-} from "./journey";
-const fresh = () => newLife({ gender: "female", skin: 0, name: "Ari" });
-test("all three choice policies finish twelve chapters and preserve a valid save", () => {
-  for (let policy = 0; policy < 3; policy++) {
-    let s = fresh();
-    for (let chapter = 0; chapter < 12; chapter++) {
-      assert.equal(s.chapter, chapter);
-      assert.equal(advance(s), s);
-      if (chapter === 7) for (let i = 0; i < 3; i++) s = meet(s, i);
-      for (const i of [1, 0]) {
-        for (let choice = 0; choice < 3; choice++) {
-          const branch = choose(s, i, choice);
-          assert.equal(choose(branch, i, (choice + 1) % 3), branch);
-          assert.ok(parseLife(JSON.stringify(branch)));
-        }
-        s = choose(s, i, policy);
-        assert.ok(parseLife(JSON.stringify(s)));
-      }
-      for (let i = 0; i < 3; i++) s = discover(s, i);
-      assert.ok(chapterDone(s));
-      s = advance(s);
-      assert.deepEqual(s.position, { x: 0, z: 2.6 });
-    }
-    assert.ok(s.complete);
-    assert.equal(Object.keys(s.choices).length, 24);
-    assert.equal(s.memories.length, 60);
-    assert.ok(parseLife(JSON.stringify(s)));
-    assert.ok(biography(s).length >= 5);
-  }
-});
-test("discoveries and hazards resolve once, scores remain finite and bounded", () => {
-  let s = fresh();
-  s = discover(s, 0);
-  assert.equal(discover(s, 0), s);
-  s = hazard(s);
-  assert.equal(hazard(s), s);
-  assert.equal(s.hazards.length, 0, "nursery has no hazard");
-  for (let chapter = 0; chapter < 2; chapter++)
-    s = advance(choose(choose(s, 0, 0), 1, 0));
-  const before = s.scores.health;
-  s = hazard(s);
-  assert.equal(s.scores.health, before - 3);
-  assert.equal(hazard(s), s);
-  assert.ok(parseLife(JSON.stringify(s)));
-  for (const score of Object.values(s.scores))
-    assert.ok(Number.isFinite(score) && score >= 0 && score <= 100);
-  assert.equal(discover(s, -1), s);
-  assert.equal(choose(s, 4, 0), s);
-});
+  replay,
+  serialise,
+  talkAction,
+  visibleOptions,
+  BOND_MAX,
+  type Life,
+} from "./core";
 
-test("saves reject duplicate, noncanonical and mismatched activity records", () => {
-  const valid = discover(choose(fresh(), 0, 0), 1);
-  const edits = [
-    (s: typeof valid) => {
-      s.choices["00:0"] = s.choices["0:0"];
-      delete s.choices["0:0"];
-    },
-    (s: typeof valid) => {
-      s.discoveries = ["00:1"];
-    },
-    (s: typeof valid) => {
-      s.memories[0].id = "invented";
-    },
-    (s: typeof valid) => {
-      s.memories[0].effect.health = Infinity;
-    },
-    (s: typeof valid) => {
-      s.memories[0].effect.health = -1;
-    },
-    (s: typeof valid) => {
-      s.memories[1] = structuredClone(s.memories[0]);
-    },
-    (s: typeof valid) => {
-      s.memories = [];
-    },
-    (s: typeof valid) => {
-      s.hazards = [0, 0];
-    },
-  ];
-  for (const edit of edits) {
-    const broken = structuredClone(valid);
-    edit(broken);
-    assert.equal(parseLife(JSON.stringify(broken)), null);
-  }
-  // Original 0.1.0 discovery prose remains a supported save format.
-  valid.memories[1].text =
-    "You made a little time for something that mattered.";
-  assert.ok(parseLife(JSON.stringify(valid)));
-});
-test("invalid or tampered saves are rejected without mutation", () => {
-  const s = fresh(),
-    raw = JSON.stringify(s);
-  assert.ok(parseLife(raw));
-  assert.equal(parseLife("{broken"), null);
-  for (const patch of [
-    { chapter: 12 },
-    { version: 2 },
-    { scores: { health: null, happiness: 2, money: 2 } },
-    { position: { x: 1e8, z: 0 } },
-    { complete: true },
-    { facts: { education: "university" } },
-  ])
-    assert.equal(parseLife(JSON.stringify({ ...s, ...patch })), null);
-  assert.equal(JSON.stringify(s), raw);
-});
-test("every encounter has distinct options and every chapter has three discoveries", () => {
-  assert.equal(chapters.length, 12);
-  for (const c of chapters) {
-    assert.equal(c.encounters.length, 2);
-    assert.equal(c.discoveries.length, 3);
-    for (const e of c.encounters) {
-      assert.equal(e.options.length, 3);
-      assert.equal(new Set(e.options.map((o) => o.label)).size, 3);
-      assert.ok(e.options.every((o) => o.memory.length > 20));
-    }
-  }
-});
+export const id = { name: "Ari", skin: 2, hair: 3, colour: 1 };
+const must = (l: Life, a: string) => {
+  const n = act(l, a);
+  assert.notEqual(n, l, `refused: ${a} in chapter ${l.chapter + 1}`);
+  return n;
+};
 
-test("all twelve activities save incremental progress, award once and allow a full life", () => {
-  let s = fresh();
-  for (let chapter = 0; chapter < 12; chapter++) {
-    assert.equal(activity(s).title.length > 5, true);
-    s = assistActivity(s);
-    assert.ok(record(s).complete);
-    assert.equal(assistActivity(s), s);
-    assert.equal(perform(s, "finish"), s);
-    assert.ok(
-      parseLife(JSON.stringify(s)),
-      `chapter ${chapter + 1} activity save`,
+/** Deterministic pseudo-random numbers for reproducible random lives. */
+function rng(seed: number) {
+  return () => {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
+  };
+}
+
+type Policy = {
+  pick: (l: Life, m: Moment, open: number[]) => number;
+  sides: (l: Life, sides: Moment[]) => Moment[];
+  activity: (l: Life) => boolean;
+  plan: (l: Life) => string[];
+  grade: (l: Life) => KiteGrade;
+};
+
+export function live(p: Policy, stopBefore = chapters.length): Life {
+  let l = newLife(id);
+  for (let c = 0; c < stopBefore; c++) {
+    assert.equal(l.chapter, c);
+    for (const g of chapterOf(l).guests ?? []) l = must(l, `meet:${g}`);
+    for (let i = 0; i < 3; i++) l = must(l, `find:${i}`);
+    const run = (m: Moment) => {
+      const open = visibleOptions(l, m).filter(([o]) => optionOpen(l, o)).map(([, i]) => i);
+      assert.ok(open.length, `${m.id} has no open option`);
+      l = must(l, talkAction(m.id, p.pick(l, m, open)));
+    };
+    const sides = p.sides(
+      l,
+      momentsOf(l).filter((m) => m.kind === "side"),
     );
-    if (chapter === 7) for (let i = 0; i < 3; i++) s = meet(s, i);
-    s = advance(choose(choose(s, 1, 1), 0, 1));
+    const activityFirst = p.activity(l);
+    if (activityFirst && canStartActivity(l)) {
+      const a = chapterOf(l).activity;
+      l = must(l, "start");
+      if (a.kind === "hunt") a.items!.forEach((_, i) => (l = must(l, `hunt:${i}`)));
+      else if (a.kind === "plan") {
+        for (const b of p.plan(l)) l = must(l, `plan:${b}`);
+        l = must(l, "commit");
+      } else l = must(l, `kite:${p.grade(l)}`);
+      assert.ok(record(l).complete);
+    }
+    for (const m of sides) if (canTalk(l, m)) run(m);
+    run(mainMoment(l));
+    // In the last chapter there is no clock: visit everyone who came.
+    if (c === chapters.length - 1) for (const m of momentsOf(l)) if (canTalk(l, m)) run(m);
+    l = must(l, "next");
   }
-  assert.ok(s.complete);
-  assert.equal(
-    s.memories.filter((m) => m.id.startsWith("activity:")).length,
-    12,
-  );
-  assert.ok(parseLife(JSON.stringify(s)));
-});
-test("search remembers distinct solutions; planner undo and supported tuition work", () => {
-  let s = advance(choose(choose(fresh(), 0, 0), 1, 0));
-  assert.equal(perform(s, "repair"), s, "cannot repair an undiscovered boat");
-  s = perform(s, "sofa");
-  assert.equal(perform(s, "sofa"), s);
-  assert.ok(parseLife(JSON.stringify(s)), "partial search saves");
-  for (const solution of ["repair", "dad", "lend"]) {
-    const branch = perform(perform(s, "basket"), solution);
-    assert.ok(record(branch).complete);
-    assert.ok(boatEnding(branch).length > 30);
-    assert.ok(parseLife(JSON.stringify(branch)));
+  return l;
+}
+
+function randomPolicy(seed: number): Policy {
+  const r = rng(seed);
+  return {
+    pick: (_l, _m, open) => open[Math.floor(r() * open.length)],
+    sides: (_l, s) => [...s].sort(() => r() - 0.5),
+    activity: () => r() < 0.5,
+    plan: (l) => {
+      const blocks = chapterOf(l).activity.blocks!;
+      return [0, 1, 2].map(() => blocks[Math.floor(r() * blocks.length)].id);
+    },
+    grade: () => (["soar", "steady", "wobbly"] as const)[Math.floor(r() * 3)],
+  };
+}
+
+/** Choose by weighted effect plus preferred facts. */
+function greedy(weights: Record<string, number>, prefer: Record<string, string> = {}, sidePrefer: string[] = []): Policy {
+  const score = (l: Life, m: Moment, i: number) => {
+    const o = m.options[i];
+    const e = effectOf(l, o) as Record<string, number>;
+    let s = Object.entries(e).reduce((t, [k, v]) => t + (weights[k] ?? 0) * v, 0);
+    const facts = typeof o.facts === "function" ? o.facts(l) : (o.facts ?? {});
+    for (const [k, v] of Object.entries(facts)) if (prefer[k] === v) s += 1000;
+    return s;
+  };
+  return {
+    pick: (l, m, open) => open.reduce((best, i) => (score(l, m, i) > score(l, m, best) ? i : best), open[0]),
+    sides: (_l, s) => [...s].sort((a, b) => sidePrefer.indexOf(b.who) - sidePrefer.indexOf(a.who)),
+    activity: () => false,
+    plan: () => ["rest", "rest", "rest"],
+    grade: () => "soar",
+  };
+}
+
+test("random lives always finish all twelve chapters, and every save replays exactly", () => {
+  const titles = new Set<string>();
+  for (let seed = 1; seed <= 260; seed++) {
+    const l = live(randomPolicy(seed));
+    assert.ok(l.complete);
+    for (const v of Object.values(l.stats)) assert.ok(v >= 0 && v <= 100);
+    for (const v of Object.values(l.bonds)) assert.ok(v >= 0 && v <= BOND_MAX);
+    const back = parseLife(serialise(l));
+    assert.ok(back, "save must parse");
+    assert.deepEqual(back!.stats, l.stats);
+    assert.deepEqual(back!.bonds, l.bonds);
+    assert.deepEqual(back!.facts, l.facts);
+    assert.equal(back!.memories.length, l.memories.length);
+    const e = ending(l);
+    assert.ok(e.lines.length >= 8, "a full epilogue");
+    titles.add(e.title);
   }
-  for (let c = 1; c < 4; c++) s = advance(choose(choose(s, 0, 1), 1, 1));
-  const baseline = { ...s.scores };
-  s = perform(perform(s, "work"), "study");
-  s = undoActivity(s);
-  assert.deepEqual(record(s).actions, ["work"]);
-  s = perform(perform(s, "study"), "study");
-  assert.deepEqual(s.scores, baseline, "planning is a preview until confirmed");
-  s = perform(s, "finish");
-  assert.ok(scholarship(s));
-  s = advance(choose(choose(s, 0, 1), 1, 1));
-  assert.equal(conversation(s, 0).options[0].effect.money, -4);
-  s = choose(s, 0, 0);
-  assert.ok(parseLife(JSON.stringify(s)));
-});
-test("old saves migrate additively and malformed activity histories are rejected", () => {
-  const s = choose(fresh(), 0, 0);
-  const old = JSON.parse(JSON.stringify(s));
-  delete old.activities;
-  delete old.meetings;
-  const restored = parseLife(JSON.stringify(old))!;
-  assert.deepEqual(restored.scores, s.scores);
-  assert.deepEqual(restored.activities, {});
-  for (const activities of [
-    null,
-    [],
-    { "0": { actions: ["share"], complete: true } },
-    { "12": { actions: [], complete: false } },
-    { "0": { actions: ["listen"], complete: true } },
-  ])
-    assert.equal(parseLife(JSON.stringify({ ...s, activities })), null);
-});
-test("partner introductions are required only for the relevant commitment and persist", () => {
-  let s = fresh();
-  for (let c = 0; c < 7; c++) s = advance(choose(choose(s, 0, 0), 1, 0));
-  assert.equal(choose(s, 0, 0), s);
-  s = choose(s, 1, 0); // Dad may discuss home before introductions.
-  s = meet(s, 0);
-  assert.equal(meet(s, 0), s);
-  assert.equal(choose(s, 0, 1), s);
-  s = choose(s, 0, 0);
-  assert.ok(chapterDone(s));
-  assert.ok(parseLife(JSON.stringify(s)));
-  assert.equal(advance(s).facts.partner, "Avery");
+  assert.ok(titles.size >= 5, `endings reached: ${[...titles].join(", ")}`);
 });
 
-test("early interests change field opportunities without invalidating save effects", () => {
-  let s = fresh();
-  for (let c = 0; c < 5; c++) {
-    s = choose(s, 0, c === 3 ? 2 : 0);
-    s = choose(s, 1, c === 2 ? 2 : 0);
-    s = advance(s);
-  }
-  assert.equal(conversation(s, 1).options[1].effect.money, 5);
-  assert.equal(conversation(s, 1).options[2].effect.money, 3);
-  for (const i of [0, 1, 2])
-    assert.ok(parseLife(JSON.stringify(choose(s, 1, i))));
+test("the six endings are each reachable by a consistent way of living", () => {
+  const cases: [string, Policy][] = [
+    ["The Keeper of the Light", greedy({ rowan: 5, family: 1 }, { lunchbox: "stood", voss: "refused", vote: "pier", road: "home", nanaNight: "yes", lighthouse: "climbed", promise: "festival", shop: "reopened" }, ["nana", "rowan"])],
+    ["The Heart of the House", greedy({ family: 6, savings: 0.3 }, { care: "home", vote: "marina", road: "home" }, ["mum", "dad", "nana", "pip"])],
+    ["The Wanderer", greedy({ rowan: 2, health: 0.4 }, { road: "sea", vote: "marina", care: "paid", partner: "Morgan", dream: "backed", shop: "sold", final: "free", pip: "left" }, ["rowan", "morgan"])],
+    ["The Builder", greedy({ savings: 3 }, { voss: "joined", care: "paid", vote: "marina", road: "city", grade: "excellent", storm: "studied" }, [])],
+    ["The Friend", greedy({ maya: 3, rowan: 2 }, { lunchbox: "away", voss: "inside", vote: "marina", road: "city", care: "paid", partner: "none" }, ["maya", "rowan"])],
+  ];
+  for (const [title, policy] of cases) assert.equal(ending(live(policy)).title, title);
+  // The fallback ending when nobody stayed close.
+  const drifter = live(greedy({ joy: 1, savings: -1, rowan: -4, maya: -4, family: -4 }, { lunchbox: "away", voss: "inside", vote: "marina", road: "home", care: "paid", storm: "studied", partner: "Quinn", race: "together", shop: "given" }, []));
+  assert.equal(ending(drifter).title, "A Whole, Ordinary Life");
+});
+
+test("free time is a real budget: two side moments or activities per chapter, and the main story is always free", () => {
+  let l = newLife(id);
+  assert.equal(freeTime(l), 2);
+  l = must(l, talkAction("c1.mum", 0));
+  l = must(l, talkAction("c1.dad", 0));
+  assert.equal(freeTime(l), 0);
+  assert.equal(canStartActivity(l), false);
+  assert.equal(act(l, "start"), l, "no hour left for the activity");
+  l = must(l, talkAction("c1.kite", 0));
+  assert.equal(act(l, talkAction("c1.kite", 1)), l, "a moment is decided once");
+  l = must(l, "next");
+  assert.equal(freeTime(l), 2, "a new chapter brings new time");
+});
+
+test("you cannot leave a chapter before its main moment", () => {
+  const l = newLife(id);
+  assert.equal(act(l, "next"), l);
+});
+
+test("gates: a worn-out teenager can't go out onto the pontoon", () => {
+  let l = live(greedy({ rowan: 1 }), 4);
+  assert.equal(l.chapter, 4);
+  const storm = mainMoment(l);
+  l = { ...l, stats: { ...l.stats, health: 20 } };
+  assert.equal(optionOpen(l, storm.options[0]), false);
+  assert.equal(act(l, talkAction("c5.storm", 0)), l);
+  assert.notEqual(act(l, talkAction("c5.storm", 1)), l);
+});
+
+test("the vote is decided by the allies you earned across your life", () => {
+  const withAllies = live(greedy({ rowan: 5 }, { lunchbox: "stood", voss: "refused", vote: "pier" }, ["rowan"]));
+  assert.equal(withAllies.facts.pier, "restored");
+  const alone = live(greedy({ savings: 1, rowan: -3 }, { lunchbox: "away", voss: "joined", vote: "pier" }, []));
+  assert.equal(alone.facts.pier, "marina");
+});
+
+test("activities: hunts finish when every item is found, plans need three blocks and can be undone", () => {
+  let l = newLife(id);
+  l = must(l, "start");
+  assert.equal(freeTime(l), 1);
+  l = must(l, "hunt:0");
+  assert.equal(act(l, "hunt:0"), l, "each item is found once");
+  l = must(l, "hunt:1");
+  assert.equal(record(l).complete, false);
+  l = must(l, "hunt:2");
+  assert.equal(record(l).complete, true);
+  assert.ok(keepsakes(l).some((k) => k.title === "First shoes"));
+  // A planner in chapter 6
+  let p = live(greedy({ joy: 1 }), 5);
+  p = must(p, "start");
+  p = must(p, "plan:work");
+  p = must(p, "plan:rest");
+  assert.equal(act(p, "commit"), p, "three blocks are needed");
+  p = must(p, "unplan");
+  p = must(p, "plan:friends");
+  p = must(p, "plan:family");
+  assert.equal(act(p, "plan:rest"), p, "only three blocks fit");
+  p = must(p, "commit");
+  assert.ok(record(p).complete);
+});
+
+test("saves reject tampering: unknown actions, reordered logs, bad identities and wrong versions", () => {
+  const l = live(randomPolicy(7), 3);
+  const good = JSON.parse(serialise(l));
+  assert.ok(parseLife(JSON.stringify(good)));
+  const bad = [
+    { ...good, version: 1 },
+    { ...good, log: [...good.log, "next"] },
+    { ...good, log: ["next", ...good.log] },
+    { ...good, log: [...good.log.slice(0, 5), "talk:c9.care:0", ...good.log.slice(5)] },
+    { ...good, identity: { ...good.identity, skin: 99 } },
+    { ...good, identity: { ...good.identity, name: "x".repeat(40) } },
+    { ...good, log: "next" },
+  ];
+  for (const b of bad) assert.equal(parseLife(JSON.stringify(b)), null);
+  assert.equal(parseLife("{"), null);
+  assert.equal(parseLife(null), null);
+  // An out-of-bounds position is ignored rather than trusted.
+  const moved = parseLife(JSON.stringify({ ...good, position: { x: 99, z: 0 } }))!;
+  assert.notEqual(moved.position.x, 99);
+  assert.deepEqual(replay(id, [])!.stats, newLife(id).stats);
+});
+
+test("callbacks: the town remembers the boat, the lunchbox and the storm", () => {
+  const liar = live(greedy({ joy: 2 }, { boat: "cat", lunchbox: "away" }), 10);
+  const rowanSide = chapterOf(liar).moments.find((m) => m.id === "c11.rowan")!;
+  const visible = visibleOptions(liar, rowanSide).map(([o]) => (typeof o.label === "string" ? o.label : ""));
+  assert.ok(visible.includes("Apologise to the cat"), "the cat lie can finally be confessed");
+  const honest = live(greedy({ rowan: 2 }, { boat: "truth" }), 10);
+  const ctx = chapterOf(honest).moments.find((m) => m.id === "c11.rowan")!.context!(honest);
+  assert.match(ctx ?? "", /truth/);
+});
+
+test("time spent with someone at five hearts still counts: no drift", () => {
+  let l = newLife(id);
+  l = must(l, talkAction("c1.kite", 0));
+  l = must(l, "next");
+  l = { ...l, bonds: { ...l.bonds, rowan: 5 } };
+  l = must(l, talkAction("c2.boat", 1));
+  l = must(l, "next");
+  assert.equal(l.bonds.rowan, 5, "the main moment tended Rowan even though the heart was capped");
+  assert.ok(!l.drift.includes("rowan"));
+  l = { ...l, bonds: { ...l.bonds, rowan: 5 } };
+  l = must(l, talkAction("c3.lunchbox", 1));
+  l = must(l, "next");
+  assert.equal(l.bonds.rowan, 4, "Rowan was in the schoolyard and got none of your time");
+  assert.deepEqual(l.drift.includes("rowan"), true);
+});
+
+test("undoing a planned block shrinks the log instead of growing the save", () => {
+  let p = live(greedy({ joy: 1 }), 5);
+  p = must(p, "start");
+  const before = p.log.length;
+  for (let i = 0; i < 50; i++) p = must(must(p, "plan:work"), "unplan");
+  assert.equal(p.log.length, before);
+  assert.ok(parseLife(serialise(p)));
+});
+
+test("Councillor Quinn only counts as an ally if you backed the campaign", () => {
+  const base = live(greedy({ joy: 1 }), 9);
+  const withQuinn = { ...base, facts: { ...base.facts, partner: "Quinn", dream: "backed" } };
+  const waited = { ...base, facts: { ...base.facts, partner: "Quinn", dream: "waited" } };
+  assert.ok(allies(withQuinn).includes("Councillor Quinn"));
+  assert.ok(!allies(waited).includes("Councillor Quinn"));
 });

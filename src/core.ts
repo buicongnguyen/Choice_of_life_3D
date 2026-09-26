@@ -1,453 +1,481 @@
-import { chapters, careerFor, type Scores, type Facts } from "./content";
+/**
+ * Kitehaven rules. A life is an append-only log of actions replayed from a fresh start,
+ * so a save can only ever contain states the game itself could have produced.
+ *
+ * Actions: talk:<moment>:<option> · find:<i> · meet:<who> · start · hunt:<i>
+ *          plan:<block> · unplan · commit · kite:<grade> · next
+ */
 import {
-  activity,
-  allowedActions,
-  canChoose,
-  conversation,
-  guestNames,
-  record,
-  responseFor,
-  taskComplete,
-  taskResult,
-  boatEnding,
-  type ActivityRecord,
-} from "./journey";
-export const SAVE_KEY = "choice-of-life-3d-v1";
-export type Identity = {
-  gender: "male" | "female";
-  skin: number;
+  chapters,
+  people,
+  text,
+  resolveWho,
+  partnered,
+  partnerName,
+  kiteName,
+  career,
+  aOrAn,
+  type BondKey,
+  type Effect,
+  type KiteGrade,
+  type Moment,
+  type Option,
+  type Stat,
+} from "./content";
+
+export const SAVE_KEY = "choice-of-life-kitehaven-v1";
+export const LEGACY_SAVE_KEY = "choice-of-life-3d-v1";
+export const HAIR_STYLES = ["short", "swoop", "bob", "pony", "bun", "curls", "long", "spiky"] as const;
+export const SKINS = ["f2c29b", "e8a97e", "c98a5e", "a86a45", "8d5a3b", "6b4028"];
+export const COLOURS = ["2f7de1", "ee3b3b", "1fb8a8", "ffc234", "8c5cf0", "ff5f8f"];
+export const STATS: Stat[] = ["health", "joy", "savings"];
+export const BONDS: BondKey[] = ["family", "rowan", "maya", "partner"];
+export const BOND_MAX = 5;
+export const SPAWN = { x: 0, z: 2.6 };
+
+export interface Identity {
   name: string;
-};
-export type Memory = {
+  skin: number;
+  hair: number;
+  colour: number;
+}
+export interface Memory {
   id: string;
   chapter: number;
   title: string;
   text: string;
-  effect: Scores;
-};
-export type Life = {
-  version: 1;
-  chapter: number;
-  scores: Scores;
-  facts: Facts;
-  choices: Record<string, number>;
-  discoveries: string[];
-  hazards: number[];
-  memories: Memory[];
-  identity: Identity;
-  position: { x: number; z: number };
+  detail: string;
+  effect: Effect;
+  /** Bonds this moment tended (raw intent, so time spent at five hearts still counts). */
+  tended?: BondKey[];
+}
+const tendedBy = (e: Effect) => BONDS.filter((b) => (e[b] ?? 0) > 0);
+export interface ActivityState {
+  started: boolean;
+  found: number[];
+  plan: string[];
+  grade?: KiteGrade;
   complete: boolean;
-  activities: Record<string, ActivityRecord>;
+}
+export interface Life {
+  version: 2;
+  identity: Identity;
+  log: string[];
+  position: { x: number; z: number };
+  chapter: number;
+  stats: Record<Stat, number>;
+  bonds: Record<BondKey, number>;
+  facts: Record<string, string>;
+  done: Record<string, number>;
+  used: number;
+  found: string[];
   meetings: string[];
-};
-export const scoreKeys = ["health", "happiness", "money"] as const;
+  activities: Record<string, ActivityState>;
+  memories: Memory[];
+  complete: boolean;
+  /** Bonds that cooled at the last chapter change (for the chapter card). */
+  drift: BondKey[];
+}
+
 export function newLife(identity: Identity): Life {
   return {
-    version: 1,
+    version: 2,
+    identity: { ...identity },
+    log: [],
+    position: { ...SPAWN },
     chapter: 0,
-    scores: { health: 65, happiness: 60, money: 45 },
+    stats: { health: 70, joy: 55, savings: 20 },
+    bonds: { family: 1, rowan: 0, maya: 0, partner: 0 },
     facts: {},
-    choices: {},
-    discoveries: [],
-    hazards: [],
-    memories: [],
-    identity,
-    position: { x: 0, z: 2.6 },
-    complete: false,
-    activities: {},
+    done: {},
+    used: 0,
+    found: [],
     meetings: [],
+    activities: {},
+    memories: [],
+    complete: false,
+    drift: [],
   };
 }
-export const choiceId = (chapter: number, encounter: number) =>
-  `${chapter}:${encounter}`;
-export const resolved = (s: Life, i: number) =>
-  Object.hasOwn(s.choices, choiceId(s.chapter, i));
-export const chapterDone = (s: Life) =>
-  chapters[s.chapter].encounters.every((_, i) => resolved(s, i));
-function apply(s: Life, delta: Partial<Scores>): Scores {
-  const actual = { health: 0, happiness: 0, money: 0 };
-  for (const k of scoreKeys) {
-    const before = s.scores[k];
-    s.scores[k] = Math.max(0, Math.min(100, before + (delta[k] ?? 0)));
-    actual[k] = s.scores[k] - before;
+
+// ---------------------------------------------------------------------------
+// queries
+// ---------------------------------------------------------------------------
+export const chapterOf = (l: Life) => chapters[l.chapter];
+export const freeTime = (l: Life) => Math.max(0, chapterOf(l).free - l.used);
+export const record = (l: Life, chapter = l.chapter): ActivityState =>
+  l.activities[String(chapter)] ?? { started: false, found: [], plan: [], complete: false };
+
+/** People standing in the current scene: [who, anchor slot]. */
+export function castOf(l: Life): [string, number][] {
+  const seen = new Set<number>();
+  const out: [string, number][] = [];
+  for (const [who, slot, when] of chapterOf(l).cast) {
+    if (when && !when(l)) continue;
+    if (seen.has(slot)) continue;
+    seen.add(slot);
+    out.push([who, slot]);
+  }
+  return out;
+}
+export const present = (l: Life, who: string) => who === "you" || castOf(l).some(([w]) => w === resolveWho(who, l));
+
+export function momentsOf(l: Life): Moment[] {
+  return chapterOf(l).moments.filter((m) => (!m.when || m.when(l)) && present(l, m.who) && (m.who !== "partner" || partnered(l)));
+}
+export const mainMoment = (l: Life) => chapterOf(l).moments.find((m) => m.kind === "main")!;
+export const isDone = (l: Life, id: string) => Object.hasOwn(l.done, id);
+export const mainDone = (l: Life) => isDone(l, mainMoment(l).id);
+
+export function canTalk(l: Life, m: Moment) {
+  if (l.complete || isDone(l, m.id)) return false;
+  if (!momentsOf(l).includes(m)) return false;
+  return m.kind === "main" || freeTime(l) > 0;
+}
+export const visibleOptions = (l: Life, m: Moment) => m.options.map((o, i) => [o, i] as const).filter(([o]) => !o.show || o.show(l));
+export const optionOpen = (l: Life, o: Option) => !o.need || o.need.test(l);
+export const effectOf = (l: Life, o: Option): Effect => (typeof o.effect === "function" ? o.effect(l) : o.effect);
+export function canStartActivity(l: Life) {
+  const r = record(l);
+  return !l.complete && !r.started && freeTime(l) > 0;
+}
+export const canLeave = (l: Life) => !l.complete && mainDone(l);
+
+// ---------------------------------------------------------------------------
+// transitions (all pure: they return a new life, or the same one if refused)
+// ---------------------------------------------------------------------------
+function applyEffect(l: Life, e: Effect): Effect {
+  const actual: Effect = {};
+  for (const [k, v] of Object.entries(e) as [Stat | BondKey, number][]) {
+    if (!v) continue;
+    if ((STATS as string[]).includes(k)) {
+      const s = k as Stat;
+      const before = l.stats[s];
+      l.stats[s] = Math.max(0, Math.min(100, before + v));
+      if (l.stats[s] !== before) actual[s] = l.stats[s] - before;
+    } else {
+      const b = k as BondKey;
+      if (b === "partner" && !partnered(l) && v > 0 && !l.facts.partner) continue;
+      const before = l.bonds[b];
+      l.bonds[b] = Math.max(0, Math.min(BOND_MAX, before + v));
+      if (l.bonds[b] !== before) actual[b] = l.bonds[b] - before;
+    }
   }
   return actual;
 }
-export function choose(state: Life, encounter: number, option: number): Life {
-  if (
-    state.complete ||
-    !Number.isInteger(encounter) ||
-    !Number.isInteger(option) ||
-    resolved(state, encounter)
-  )
-    return state;
-  if (
-    !chapters[state.chapter]?.encounters[encounter]?.options[option] ||
-    !canChoose(state, encounter, option)
-  )
-    return state;
-  const pick = conversation(state, encounter).options[option];
-  const s = structuredClone(state),
-    id = choiceId(s.chapter, encounter);
-  s.choices[id] = option;
-  const effect = apply(s, pick.effect);
-  if (pick.fact) s.facts[pick.fact[0]] = pick.fact[1];
-  s.memories.push({
-    id,
-    chapter: s.chapter,
-    title: pick.label,
-    text: `${pick.memory} ${responseFor(s, encounter)}`,
-    effect,
-  });
+
+/** Which bond a person belongs to (people outside these four don't decay). */
+export const bondOf = (who: string, l: Life): BondKey | null =>
+  ["mum", "dad", "nana", "pip"].includes(who) ? "family" : who === "rowan" ? "rowan" : who === "maya" ? "maya" : partnered(l) && who === l.facts.partner.toLowerCase() ? "partner" : null;
+
+/**
+ * Relationships need tending: when someone is right there in the chapter and you give
+ * them none of your time, the bond cools by a heart. Returns the bonds that cooled.
+ */
+function neglect(l: Life): BondKey[] {
+  const presentBonds = new Set(castOf(l).map(([w]) => bondOf(w, l)).filter((b): b is BondKey => !!b));
+  const tended = new Set<BondKey>();
+  for (const m of l.memories) if (m.chapter === l.chapter) for (const b of m.tended ?? []) tended.add(b);
+  const cooled: BondKey[] = [];
+  for (const b of presentBonds) if (!tended.has(b) && l.bonds[b] > 0) cooled.push(b);
+  return cooled;
+}
+
+/** Ageing, the cost of living, income, and joy settling back to everyday life. */
+const AGE = [0, 0, 0, 0, 0, 0, 2, 3, 4, 5, 6, 7];
+function seasons(l: Life) {
+  const c = l.chapter;
+  const e: Effect = {};
+  let money = c >= 5 ? -8 : 0;
+  if (c >= 6 && c <= 10) money += 6 + (l.facts.road === "city" ? 3 : 0) + (l.facts.voss === "joined" ? 5 : l.facts.voss === "inside" ? 2 : 0) + (l.facts.peak === "yes" ? 6 : 0);
+  else if (c === 11) money += 5;
+  e.savings = money;
+  if (AGE[c]) e.health = -AGE[c];
+  e.joy = Math.round((50 - l.stats.joy) * 0.45);
+  applyEffect(l, e);
+}
+
+function talk(l: Life, id: string, index: number): Life | null {
+  const m = chapterOf(l).moments.find((x) => x.id === id);
+  if (!m || !canTalk(l, m)) return null;
+  const o = m.options[index];
+  if (!o || (o.show && !o.show(l)) || !optionOpen(l, o)) return null;
+  // Everything is evaluated against the life *before* the choice.
+  const effect = effectOf(l, o);
+  const facts = typeof o.facts === "function" ? o.facts(l) : (o.facts ?? {});
+  const reply = text(o.reply, l);
+  const memory = text(o.memory, l);
+  const title = text(m.title, l);
+  const s = structuredClone(l);
+  s.done[id] = index;
+  if (m.kind === "side") s.used += 1;
+  Object.assign(s.facts, facts);
+  if (facts.partner && facts.partner !== "none") s.bonds.partner = 0;
+  const actual = applyEffect(s, effect);
+  s.memories.push({ id: `m:${id}`, chapter: s.chapter, title, text: memory, detail: reply, effect: actual, tended: tendedBy(effect) });
   return s;
 }
-export function discover(state: Life, index: number): Life {
-  const id = `${state.chapter}:${index}`;
-  if (
-    state.complete ||
-    state.discoveries.includes(id) ||
-    !Number.isInteger(index) ||
-    index < 0 ||
-    index > 2
-  )
-    return state;
-  const s = structuredClone(state);
-  s.discoveries.push(id);
-  const key = scoreKeys[index];
-  const effect = apply(s, { [key]: 1 });
-  s.memories.push({
-    id: `found:${id}`,
-    chapter: s.chapter,
-    title: chapters[s.chapter].discoveries[index],
-    text: `${chapters[s.chapter].discoveries[index]}: a small moment for ${index === 0 ? "your wellbeing" : index === 1 ? "a little joy" : "tomorrow's security"}.`,
-    effect,
-  });
+
+function find(l: Life, i: number): Life | null {
+  const d = chapterOf(l).finds[i];
+  const key = `${l.chapter}:${i}`;
+  if (!d || l.complete || l.found.includes(key)) return null;
+  const s = structuredClone(l);
+  s.found.push(key);
+  const actual = applyEffect(s, { [d.stat]: 2 });
+  s.memories.push({ id: `f:${key}`, chapter: s.chapter, title: d.name, text: d.line, detail: d.line, effect: actual });
   return s;
 }
-export function meet(state: Life, index: number): Life {
-  const name = guestNames[index];
-  if (
-    state.complete ||
-    state.chapter !== 7 ||
-    !name ||
-    state.meetings.includes(name)
-  )
-    return state;
-  const s = structuredClone(state);
-  s.meetings.push(name);
+
+function meet(l: Life, who: string): Life | null {
+  const guests = chapterOf(l).guests ?? [];
+  if (l.complete || !guests.includes(who) || l.meetings.includes(who)) return null;
+  const s = structuredClone(l);
+  s.meetings.push(who);
   return s;
 }
-export function perform(state: Life, action: string): Life {
-  if (!allowedActions(state).some((a) => a.id === action)) return state;
-  const s = structuredClone(state),
-    previous = record(s);
-  const actions = [...previous.actions, action];
-  const complete = taskComplete(s, actions);
-  s.activities[String(s.chapter)] = { actions, complete };
-  if (complete) {
-    const result = taskResult(s);
-    s.memories.push({
-      id: `activity:${s.chapter}`,
-      chapter: s.chapter,
-      title: activity(s).keepsake,
-      text: result.text,
-      effect: apply(s, result.effect),
-    });
+
+function finishActivity(s: Life) {
+  const a = chapterOf(s).activity;
+  const r = record(s);
+  const plan = r.plan;
+  let effect: Effect = {};
+  if (a.kind === "plan") for (const id of plan) for (const [k, v] of Object.entries(a.blocks!.find((b) => b.id === id)!.effect)) effect[k as Stat] = (effect[k as Stat] ?? 0) + v;
+  const res = a.result(s, { plan, grade: r.grade });
+  for (const [k, v] of Object.entries(res.effect)) effect[k as Stat] = (effect[k as Stat] ?? 0) + (v ?? 0);
+  Object.assign(s.facts, res.facts ?? {});
+  const actual = applyEffect(s, effect);
+  s.activities[String(s.chapter)].complete = true;
+  s.memories.push({ id: `a:${s.chapter}`, chapter: s.chapter, title: a.keepsake, text: res.text, detail: res.text, effect: actual, tended: tendedBy(effect) });
+}
+
+function activityStep(l: Life, verb: string, arg: string): Life | null {
+  const a = chapterOf(l).activity;
+  const r = record(l);
+  if (l.complete) return null;
+  if (verb === "start") {
+    if (!canStartActivity(l)) return null;
+    const s = structuredClone(l);
+    s.used += 1;
+    s.activities[String(s.chapter)] = { started: true, found: [], plan: [], complete: false };
+    return s;
   }
-  return s;
-}
-export function undoActivity(state: Life): Life {
-  const r = record(state);
-  if (
-    state.complete ||
-    r.complete ||
-    activity(state).kind !== "planner" ||
-    !r.actions.length
-  )
-    return state;
-  const s = structuredClone(state);
-  s.activities[String(s.chapter)].actions.pop();
-  return s;
-}
-export function assistActivity(state: Life): Life {
-  let s = state;
-  // Bounded authored tasks; assistance uses exactly the same transition rules.
-  for (let i = 0; i < 8 && !record(s).complete; i++) {
-    const options = allowedActions(s);
-    if (!options.length) break;
-    const plan =
-      s.chapter === 4
-        ? ["study", "rest", "friends"]
-        : s.chapter === 6
-          ? ["service", "quality", "rest"]
-          : ["visit", "support", "rest"];
-    const preferred =
-      activity(s).kind === "planner"
-        ? plan[record(s).actions.length]
-        : s.chapter === 1
-          ? record(s).actions.includes("basket")
-            ? "repair"
-            : "basket"
-          : "";
-    s = perform(
-      s,
-      options.find((a) => a.id === preferred)?.id ?? options[0].id,
-    );
+  if (!r.started || r.complete) return null;
+  const s = structuredClone(l);
+  const rec = s.activities[String(s.chapter)];
+  if (verb === "hunt" && a.kind === "hunt") {
+    const i = Number(arg);
+    if (!Number.isInteger(i) || i < 0 || i >= a.items!.length || rec.found.includes(i)) return null;
+    rec.found.push(i);
+    if (rec.found.length === a.items!.length) finishActivity(s);
+    return s;
   }
+  if (verb === "plan" && a.kind === "plan") {
+    if (rec.plan.length >= 3 || !a.blocks!.some((b) => b.id === arg)) return null;
+    rec.plan.push(arg);
+    return s;
+  }
+  if (verb === "unplan" && a.kind === "plan") {
+    if (!rec.plan.length) return null;
+    rec.plan.pop();
+    return s;
+  }
+  if (verb === "commit" && a.kind === "plan") {
+    if (rec.plan.length !== 3) return null;
+    finishActivity(s);
+    return s;
+  }
+  if (verb === "kite" && a.kind === "kite") {
+    if (!["soar", "steady", "wobbly"].includes(arg)) return null;
+    rec.grade = arg as KiteGrade;
+    finishActivity(s);
+    return s;
+  }
+  return null;
+}
+
+function next(l: Life): Life | null {
+  if (!canLeave(l)) return null;
+  const s = structuredClone(l);
+  s.position = { ...SPAWN };
+  if (s.chapter === chapters.length - 1) {
+    s.complete = true;
+    return s;
+  }
+  const cooled = neglect(s);
+  for (const b of cooled) s.bonds[b] -= 1;
+  if (cooled.length) applyEffect(s, { joy: -3 * cooled.length });
+  s.drift = cooled;
+  s.chapter += 1;
+  s.used = 0;
+  seasons(s);
   return s;
 }
-export function hazard(state: Life): Life {
-  if (
-    state.complete ||
-    state.chapter < 2 ||
-    state.chapter > 9 ||
-    state.hazards.includes(state.chapter)
-  )
-    return state;
-  const s = structuredClone(state);
-  s.hazards.push(s.chapter);
-  apply(s, { health: -3 });
+
+/** Apply one logged action. Returns the same object when the action is not allowed. */
+export function act(l: Life, action: string): Life {
+  const [verb, a = "", b = ""] = action.split(":");
+  let s: Life | null = null;
+  if (verb === "talk") s = /^\d$/.test(b) ? talk(l, a, Number(b)) : null;
+  else if (verb === "find") s = /^[0-2]$/.test(a) ? find(l, Number(a)) : null;
+  else if (verb === "meet") s = meet(l, a);
+  else if (verb === "next") s = next(l);
+  else if (["start", "hunt", "plan", "unplan", "commit", "kite"].includes(verb)) s = activityStep(l, verb, a);
+  if (!s) return l;
+  if (verb === "unplan") {
+    // Undo removes the block from the log rather than appending, so plan/undo can't grow a save.
+    const i = l.log.map((x) => x.startsWith("plan:")).lastIndexOf(true);
+    s.log = [...l.log.slice(0, i), ...l.log.slice(i + 1)];
+  } else s.log = [...l.log, action];
   return s;
 }
-export function advance(state: Life): Life {
-  if (state.complete || !chapterDone(state)) return state;
-  const s = structuredClone(state);
-  s.position = { x: 0, z: 2.6 };
-  if (s.chapter === chapters.length - 1) s.complete = true;
-  else s.chapter++;
-  return s;
+export const talkAction = (id: string, i: number) => `talk:${id}:${i}`;
+
+export function replay(identity: Identity, log: string[]): Life | null {
+  let l = newLife(identity);
+  for (const a of log) {
+    const n = act(l, a);
+    if (n === l) return null;
+    l = n;
+  }
+  return l;
 }
-export function biography(s: Life): string[] {
-  const f = s.facts;
-  return [
-    `It began with ${f.beginning === "comfort" ? "a cuddle" : f.beginning === "curiosity" ? "a little melody" : "a quiet afternoon"} and a blue tin holding a ${f.tin ?? "small treasure"}.`,
-    `You found your way into ${careerFor(f).toLowerCase()} work through ${f.education === "university" ? "university" : f.education === "training" ? "practical training" : "learning on the job"}. ${f.work === "ambitious" ? "You took on difficult things." : f.work === "supportive" ? "You made room for others." : "You looked for a rhythm you could sustain."}`,
-    f.home === "partnered"
-      ? `You built a home with ${f.partner}. Love lived in the ordinary days you shared.`
-      : f.home === "community"
-        ? "Your community became a home bigger than any building."
-        : "Your independent life was full of friends and chosen family.",
-    `Rowan remembered you across the years. ${boatEnding(s)} ${f.reunion === "share" ? "You passed it on to another childhood." : "You kept a place for an old friendship."}`,
-    f.gift === "knowledge"
-      ? "You left knowledge and encouragement for the next person."
-      : f.gift === "opportunity"
-        ? "You gave someone else room to begin."
-        : "You left the world with a little more room for belonging.",
-    `The ${f.project ?? "first"} school project and ${f.club ?? "school"} club gave your ${f.hobby ?? "childhood"} interests somewhere to grow. You learned to protect ${f.rhythm === "rest" ? "rest" : f.rhythm === "friends" ? "friendship" : "time to practise"}.`,
-    `When Mum needed help, you ${f.care === "present" ? "made time to be there" : f.care === "support" ? "arranged skilled support" : "built a network of support"}. At work you ${f.midlife === "promotion" ? "accepted a promotion" : f.midlife === "time" ? "chose a lighter schedule" : "asked for flexibility"}. These choices shaped the busy middle of your life.`,
-    `Your experience became ${f.legacy === "mentor" ? "time spent mentoring" : f.legacy === "builder" ? "a guide for others" : "connections between people"}. Retirement made room for ${f.retirement === "garden" ? "a garden" : f.retirement === "travel" ? "a long-imagined journey" : "a quiet creative routine"}.`,
-    `Looking back, you chose to hold close ${f.meaning === "people" ? "the people who made room for you" : f.meaning === "work" ? "the things you helped make possible" : "the ordinary days"}. ${Object.values(s.activities).filter((r) => r.complete).length} hands-on moments found a place in your tin.`,
-  ];
+
+// ---------------------------------------------------------------------------
+// saving
+// ---------------------------------------------------------------------------
+export function serialise(l: Life) {
+  return JSON.stringify({ version: 2, identity: l.identity, log: l.log, position: l.position });
+}
+export function validIdentity(i: unknown): i is Identity {
+  const x = i as Identity;
+  return (
+    !!x &&
+    typeof x.name === "string" &&
+    x.name.length <= 24 &&
+    [x.skin, x.hair, x.colour].every((n) => Number.isInteger(n)) &&
+    x.skin >= 0 && x.skin < SKINS.length &&
+    x.hair >= 0 && x.hair < HAIR_STYLES.length &&
+    x.colour >= 0 && x.colour < COLOURS.length
+  );
 }
 export function parseLife(raw: string | null): Life | null {
-  if (!raw || raw.length > 100000) return null;
+  if (!raw || raw.length > 60000) return null;
   try {
-    const s = JSON.parse(raw) as Life;
-    // Additive migration preserves every existing score, choice and memory.
-    if (s.activities === undefined) s.activities = {};
-    if (s.meetings === undefined)
-      s.meetings = guestNames.includes(s.facts?.partner)
-        ? [s.facts.partner]
-        : [];
-    if (
-      s.version !== 1 ||
-      !Number.isInteger(s.chapter) ||
-      s.chapter < 0 ||
-      s.chapter >= chapters.length ||
-      typeof s.complete !== "boolean"
-    )
-      return null;
-    if (
-      !s.scores ||
-      scoreKeys.some(
-        (k) =>
-          !Number.isFinite(s.scores[k]) || s.scores[k] < 0 || s.scores[k] > 100,
-      )
-    )
-      return null;
-    if (
-      !s.identity ||
-      !["male", "female"].includes(s.identity.gender) ||
-      !Number.isInteger(s.identity.skin) ||
-      s.identity.skin < 0 ||
-      s.identity.skin > 3 ||
-      typeof s.identity.name !== "string" ||
-      s.identity.name.length > 24
-    )
-      return null;
-    if (
-      !s.position ||
-      !Number.isFinite(s.position.x) ||
-      !Number.isFinite(s.position.z) ||
-      Math.abs(s.position.x) > 6 ||
-      Math.abs(s.position.z) > 4.3
-    )
-      return null;
-    if (
-      !s.choices ||
-      typeof s.choices !== "object" ||
-      Array.isArray(s.choices) ||
-      Object.keys(s.choices).length > 24
-    )
-      return null;
-    const expectedFacts: Facts = {};
-    for (const [id, option] of Object.entries(s.choices)) {
-      if (!/^(0|[1-9]\d*):(0|1)$/.test(id) || !Number.isInteger(option))
-        return null;
-      const [ch, en] = id.split(":").map(Number);
-      const pick = chapters[ch]?.encounters[en]?.options[option];
-      if (!pick || ch > s.chapter) return null;
-      if (pick.fact) expectedFacts[pick.fact[0]] = pick.fact[1];
-    }
-    for (let ch = 0; ch < s.chapter; ch++)
-      if (
-        chapters[ch].encounters.some(
-          (_, i) => !Object.hasOwn(s.choices, choiceId(ch, i)),
-        )
-      )
-        return null;
-    if (s.complete && (s.chapter !== 11 || !chapterDone(s))) return null;
-    if (
-      !s.facts ||
-      typeof s.facts !== "object" ||
-      Array.isArray(s.facts) ||
-      JSON.stringify(Object.entries(s.facts).sort()) !==
-        JSON.stringify(Object.entries(expectedFacts).sort())
-    )
-      return null;
-    if (
-      !Array.isArray(s.meetings) ||
-      new Set(s.meetings).size !== s.meetings.length ||
-      s.meetings.some((name) => !guestNames.includes(name)) ||
-      (s.chapter < 7 && s.meetings.length)
-    )
-      return null;
-    if (
-      !s.activities ||
-      typeof s.activities !== "object" ||
-      Array.isArray(s.activities) ||
-      Object.keys(s.activities).length > 12
-    )
-      return null;
-    for (const [key, progress] of Object.entries(s.activities)) {
-      if (
-        !/^(0|[1-9]\d*)$/.test(key) ||
-        Number(key) > s.chapter ||
-        !progress ||
-        !Array.isArray(progress.actions) ||
-        progress.actions.length > 6 ||
-        typeof progress.complete !== "boolean"
-      )
-        return null;
-      const replay = {
-        ...s,
-        chapter: Number(key),
-        complete: false,
-        activities: {
-          ...s.activities,
-          [key]: { actions: [] as string[], complete: false },
-        },
-      };
-      for (const action of progress.actions) {
-        if (!allowedActions(replay).some((a) => a.id === action)) return null;
-        replay.activities[key].actions.push(action);
-        replay.activities[key].complete = taskComplete(
-          replay,
-          replay.activities[key].actions,
-        );
-      }
-      if (replay.activities[key].complete !== progress.complete) return null;
-    }
-    if (
-      !Array.isArray(s.discoveries) ||
-      s.discoveries.length > 36 ||
-      new Set(s.discoveries).size !== s.discoveries.length ||
-      s.discoveries.some(
-        (id) =>
-          typeof id !== "string" ||
-          !/^(0|[1-9]\d*):[0-2]$/.test(id) ||
-          Number(id.split(":")[0]) > s.chapter,
-      )
-    )
-      return null;
-    if (
-      !Array.isArray(s.hazards) ||
-      s.hazards.length > 12 ||
-      new Set(s.hazards).size !== s.hazards.length ||
-      s.hazards.some(
-        (n) => !Number.isInteger(n) || n < 2 || n > 9 || n > s.chapter,
-      )
-    )
-      return null;
-    if (
-      !Array.isArray(s.memories) ||
-      s.memories.length !==
-        Object.keys(s.choices).length +
-          s.discoveries.length +
-          Object.values(s.activities).filter((r) => r.complete).length ||
-      s.memories.some(
-        (m) =>
-          !m ||
-          typeof m.id !== "string" ||
-          typeof m.text !== "string" ||
-          m.text.length > 600 ||
-          typeof m.title !== "string" ||
-          m.title.length > 100 ||
-          !Number.isInteger(m.chapter) ||
-          m.chapter < 0 ||
-          m.chapter > s.chapter,
-      )
-    )
-      return null;
-    const memoryIds = new Set<string>();
-    for (const memory of s.memories) {
-      if (memoryIds.has(memory.id)) return null;
-      memoryIds.add(memory.id);
-      if (memory.id.startsWith("activity:")) {
-        const key = memory.id.slice(9);
-        if (key !== String(memory.chapter) || !s.activities[key]?.complete)
-          return null;
-        const nominal = taskResult({ ...s, chapter: memory.chapter }).effect;
-        if (
-          !memory.effect ||
-          scoreKeys.some(
-            (k) =>
-              !Number.isFinite(memory.effect[k]) ||
-              Math.abs(memory.effect[k]) > Math.abs(nominal[k] ?? 0) ||
-              (memory.effect[k] !== 0 &&
-                Math.sign(memory.effect[k]) !== Math.sign(nominal[k] ?? 0)),
-          )
-        )
-          return null;
-        continue;
-      }
-      const discovery = memory.id.startsWith("found:");
-      const id = discovery ? memory.id.slice(6) : memory.id;
-      if (
-        discovery ? !s.discoveries.includes(id) : !Object.hasOwn(s.choices, id)
-      )
-        return null;
-      const [chapter, index] = id.split(":").map(Number);
-      if (memory.chapter !== chapter) return null;
-      const nominal: Partial<Scores> = discovery
-        ? { [scoreKeys[index]]: 4 }
-        : chapters[chapter].encounters[index].options[s.choices[id]].effect;
-      if (
-        !memory.effect ||
-        scoreKeys.some((key) => {
-          const actual = memory.effect[key],
-            expected = nominal[key] ?? 0;
-          return (
-            !Number.isFinite(actual) ||
-            Math.abs(actual) > Math.abs(expected) ||
-            (actual !== 0 && Math.sign(actual) !== Math.sign(expected))
-          );
-        })
-      )
-        return null;
-    }
-    return s;
+    const data = JSON.parse(raw);
+    if (!data || data.version !== 2 || !validIdentity(data.identity)) return null;
+    if (!Array.isArray(data.log) || data.log.length > 2000 || data.log.some((a: unknown) => typeof a !== "string" || a.length > 48)) return null;
+    const l = replay(data.identity, data.log);
+    if (!l) return null;
+    const p = data.position;
+    if (p && Number.isFinite(p.x) && Number.isFinite(p.z) && Math.abs(p.x) < 6 && Math.abs(p.z) < 4.2) l.position = { x: p.x, z: p.z };
+    return l;
   } catch {
     return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// keepsakes and the ending
+// ---------------------------------------------------------------------------
+export function keepsakes(l: Life) {
+  const cards: { chapter: number; title: string; text: string; icon: string }[] = [];
+  const f = l.facts;
+  if (f.kite) cards.push({ chapter: 0, title: `Your ${kiteName(l)} kite`, text: "Nana June's gift. It knew you forever.", icon: "kite" });
+  for (let c = 0; c <= Math.min(l.chapter, chapters.length - 1); c++) {
+    const r = record(l, c);
+    if (!r.complete) continue;
+    const a = chapters[c].activity;
+    const m = l.memories.find((x) => x.id === `a:${c}`);
+    cards.push({ chapter: c, title: a.keepsake, text: m?.text ?? "", icon: a.icon });
+  }
+  if (f.race === "won") cards.push({ chapter: 3, title: "Junior race medal", text: "Heavy, real, and with your name on it.", icon: "medal" });
+  if (f.race === "gave") cards.push({ chapter: 3, title: "Rowan's rosette", text: "Third place. He gave it to you.", icon: "medal" });
+  if (f.nanaNight === "yes") cards.push({ chapter: 4, title: "The lighthouse key", text: "“Somebody should keep the light on.”", icon: "key" });
+  return cards.sort((a, b) => a.chapter - b.chapter);
+}
+
+export function presentAtEnd(l: Life) {
+  const c = chapters.length - 1;
+  const view = { ...l, chapter: c };
+  return castOf(view).map(([who]) => who);
+}
+
+/** The shape of a life: every archetype collects evidence from the whole story; the strongest wins. */
+export function archetypes(l: Life) {
+  const f = l.facts;
+  const b = l.bonds;
+  const up = (n: number, from: number) => Math.max(0, n - from);
+  const score = {
+    keeper: (f.pier === "restored" || f.pier === "shared" ? 4 : 0) + (f.nanaNight === "yes" ? 1 : 0) + (f.lighthouse === "climbed" ? 1 : 0) + up(b.rowan, 2) + (f.promise === "festival" ? 1 : 0) + (f.shop === "reopened" ? 1 : 0),
+    heart: (f.care === "home" || f.care === "shared" ? 3 : 0) + up(b.family, 2) + (f.mumLast === "yes" ? 1 : 0) + (f.dadLast === "yes" ? 1 : 0) + (f.pipStory ? 1 : 0) + (f.final === "pip" ? 1 : 0),
+    wanderer: (f.road === "sea" ? 3 : 0) + (f.shop === "sold" ? 3 : 0) + (f.partner === "Morgan" ? 1 : 0) + (f.partner === "Morgan" && f.dream === "backed" ? 1 : 0) + (f.pip === "left" ? 1 : 0) + (f.final === "free" ? 1 : 0),
+    builder: (f.voss === "joined" ? 3 : 0) + (f.peak === "yes" ? 2 : 0) + (l.stats.savings >= 60 ? 1 : 0) + (f.road === "city" ? 1 : 0) + (f.race === "won" ? 1 : 0) + (f.vote === "marina" ? 1 : 0),
+    friend: up(b.rowan, 3) + up(b.maya, 3) + (b.rowan >= 3 && b.maya >= 3 ? 1 : 0) + (f.partner === "none" ? 2 : 0) + (f.mayaPlan === "shared" ? 1 : 0) + (f.race === "gave" || f.race === "together" ? 1 : 0) + (f.final === "rowan" || f.final === "maya" ? 1 : 0),
+  };
+  return score;
+}
+
+const ARCHETYPES = {
+  keeper: ["The Keeper of the Light", "The Old Pier stands, the lighthouse turns, and the town you loved is still the town you loved."],
+  heart: ["The Heart of the House", "Every kitchen you ever stood in was full, and noisy, and yours."],
+  wanderer: ["The Wanderer", "You saw the world, and the world kept sending you home."],
+  builder: ["The Builder", "You built things that will outlast you — and learned, late, what they cost."],
+  friend: ["The Friend", "Two people knew you your whole life, and chose you every single time."],
+} as const;
+
+export function ending(l: Life) {
+  const f = l.facts;
+  const score = archetypes(l);
+  let best: keyof typeof ARCHETYPES | null = null;
+  for (const k of Object.keys(ARCHETYPES) as (keyof typeof ARCHETYPES)[]) if (score[k] >= 5 && (!best || score[k] > score[best])) best = k;
+  const [title, line] = best ? ARCHETYPES[best] : ["A Whole, Ordinary Life", "No monuments. Just a town full of people who are glad you were in it."];
+  const lines: string[] = [];
+  lines.push(`It began with a ${kiteName(l)} kite and a laugh every nine seconds.`);
+  lines.push(
+    f.boat === "truth"
+      ? "You told the truth about a toy boat when you were four, and learned how fast trust can grow."
+      : f.boat === "confessed"
+        ? "You told Rowan the truth about his boat in the end. He had always known."
+        : f.boat === "cat"
+          ? "Somewhere, a cat was blamed for a boat it never took. It never forgave you."
+          : "You carried a secret the size of a toy boat for your whole life.",
+  );
+  lines.push(
+    f.lunchbox === "stood"
+      ? "You stood up to Tobias Voss when it cost you something, and he never forgot it."
+      : f.lunchbox === "teacher"
+        ? "When Maya needed help, you went and fetched it."
+        : "Once, on a playground, you looked at your shoes. You spent a long time making up for it.",
+  );
+  lines.push(
+    f.storm === "saved"
+      ? "On the night of the storm you went out onto the pontoon for Rowan."
+      : f.storm === "pulled"
+        ? "On the night of the storm you chose Rowan over the boat."
+        : "On the night of the storm you chose your future. It turned out well; it also cost something.",
+  );
+  if (f.road) lines.push(`You became ${aOrAn(career(l))}${f.road === "city" ? " in the city" : f.road === "sea" ? " on the water" : " in Kitehaven"}.`);
+  if (f.pier)
+    lines.push(
+      f.pier === "restored"
+        ? "The Old Pier stands again, board by board, because you spoke for it."
+        : f.pier === "shared"
+          ? "The harbour has a marina and a pier now, side by side, because you gave Maya's idea a stage."
+          : f.vote === "marina"
+            ? "The marina gleams where the Old Pier stood. You backed it, and the town got its jobs."
+            : "The marina gleams where the Old Pier stood. You fought for the pier and lost, and Rowan remembers that you tried.",
+    );
+  lines.push(partnered(l) ? `You built a life with ${partnerName(l)}${f.dream === "backed" ? ", and backed their dream all the way" : ""}.` : "Your friends were your family, and it was enough.");
+  if (f.care) lines.push(f.care === "home" ? "When Mum needed you, you brought her home." : f.care === "shared" ? "When Mum needed you, you didn't do it alone." : "When Mum needed care, you paid for the best you could find, and visited on Sundays.");
+  if (f.shop) lines.push(f.shop === "reopened" ? "Dad's kite shop has children's noses pressed to the window again." : f.shop === "given" ? "Pip runs the kite shop now, in a way you don't entirely understand." : "You sold the shop and sent a postcard home from every port.");
+  const finalLine =
+    f.final === "rowan" ? "At the last festival, you held the string with Rowan." : f.final === "partner" ? `At the last festival, you held the string with ${partnerName(l)}.` : f.final === "pip" ? "At the last festival, you put the string in Pip's hands." : f.final === "maya" ? "At the last festival, Maya explained your kite to you, incorrectly." : "At the last festival, you opened your hands and let the kite fly.";
+  lines.push(finalLine);
+  const st = l.stats;
+  lines.push(
+    st.health >= 60 ? "You were still walking the cliff path at the end, and pretending it was easy." : st.health >= 30 ? "Your body kept count of the storms and the overtime, and you learned to rest." : "You were frail at the end, and fiercely yourself.",
+  );
+  lines.push(st.joy >= 65 ? "Mostly, you were happy. You noticed it while it was happening, which is rarer than it sounds." : st.joy >= 40 ? "You had your share of grey days and your share of kites." : "Some years were hard to love. You carried them anyway.");
+  return { title, line, lines, present: presentAtEnd(l).map((w) => people[w]?.name ?? w) };
 }

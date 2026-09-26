@@ -1,15 +1,15 @@
 {
   "name": "choice-of-life-3d",
-  "version": "0.3.2",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "A warm 3D life adventure, built with Blender and Three.js.",
+  "description": "Choice of Life: Kitehaven \u2014 one whole life in a bright harbour town. Blender + Three.js.",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build && node scripts/release.mjs",
     "preview": "vite preview --host 127.0.0.1",
-    "test": "tsx --test src/core.test.ts src/navigation.test.ts src/graphics.test.ts src/choice-copy.test.ts",
-    "smoke": "node scripts/story-smoke.mjs"
+    "test": "tsx --test src/core.test.ts src/content.test.ts src/navigation.test.ts src/graphics.test.ts",
+    "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "three": "0.185.1"

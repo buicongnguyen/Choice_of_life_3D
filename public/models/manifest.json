@@ -1,130 +1,194 @@
 {
   "author": "Choice of Life 3D project",
-  "generator": "Blender 4.5 / art/build_crafted_assets.py",
-  "revision": "crafted-realism-0.2.0",
-  "license": "Original project-generated geometry and procedural textures; no external assets",
-  "files": {
-    "home.glb": 2082716,
-    "school.glb": 2332064,
-    "campus.glb": 2332908,
-    "office.glb": 2689828,
-    "town.glb": 3069928,
-    "garden.glb": 2353620,
-    "male.glb": 710356,
-    "female.glb": 818812,
-    "baby.glb": 626988,
-    "cat.glb": 290624,
-    "apple.glb": 75652,
-    "book.glb": 100440,
-    "coins.glb": 268148,
-    "boat.glb": 79848,
-    "tin.glb": 85388,
-    "blanket.glb": 128116,
-    "rattle.glb": 117824,
-    "plant.glb": 110556,
-    "letter.glb": 45656,
-    "ball.glb": 127396
-  },
-  "detail": {
-    "home": {
-      "bytes": 2082716,
-      "triangles": 46760,
-      "meshes": 16
+  "generator": "Blender 4.5 / art/kitehaven/build.py",
+  "revision": "kitehaven-1.0.0",
+  "license": "Original project-generated geometry; vertex colour only, no textures or external assets",
+  "full": {
+    "nursery": {
+      "bytes": 228448,
+      "triangles": 27172,
+      "meshes": 5
     },
-    "school": {
-      "bytes": 2332064,
-      "triangles": 47756,
-      "meshes": 16
+    "gardens": {
+      "bytes": 406280,
+      "triangles": 45196,
+      "meshes": 8
     },
-    "campus": {
-      "bytes": 2332908,
-      "triangles": 47756,
+    "schoolyard": {
+      "bytes": 272880,
+      "triangles": 26492,
+      "meshes": 5
+    },
+    "pier": {
+      "bytes": 393840,
+      "triangles": 59070,
+      "meshes": 21
+    },
+    "storm": {
+      "bytes": 294520,
+      "triangles": 40664,
+      "meshes": 11
+    },
+    "station": {
+      "bytes": 269820,
+      "triangles": 35078,
+      "meshes": 6
+    },
+    "workplace": {
+      "bytes": 267136,
+      "triangles": 27846,
+      "meshes": 19
+    },
+    "rooftop": {
+      "bytes": 450824,
+      "triangles": 49544,
+      "meshes": 5
+    },
+    "kitchen": {
+      "bytes": 223964,
+      "triangles": 26428,
+      "meshes": 6
+    },
+    "square": {
+      "bytes": 294292,
+      "triangles": 29482,
+      "meshes": 6
+    },
+    "cottage": {
+      "bytes": 408468,
+      "triangles": 41466,
+      "meshes": 5
+    },
+    "clifftop": {
+      "bytes": 377988,
+      "triangles": 46854,
       "meshes": 17
     },
-    "office": {
-      "bytes": 2689828,
-      "triangles": 54620,
-      "meshes": 16
+    "harbour": {
+      "bytes": 1078928,
+      "triangles": 142860,
+      "meshes": 13
     },
-    "town": {
-      "bytes": 3069928,
-      "triangles": 87204,
-      "meshes": 20
-    },
-    "garden": {
-      "bytes": 2353620,
-      "triangles": 75528,
-      "meshes": 18
-    },
-    "male": {
-      "bytes": 710356,
-      "triangles": 25614,
-      "meshes": 29
-    },
-    "female": {
-      "bytes": 818812,
-      "triangles": 30054,
-      "meshes": 31
+    "props": {
+      "bytes": 180536,
+      "triangles": 19476,
+      "meshes": 50
     },
     "baby": {
-      "bytes": 626988,
-      "triangles": 23100,
-      "meshes": 26
+      "bytes": 44924,
+      "triangles": 7354,
+      "meshes": 21
     },
-    "cat": {
-      "bytes": 290624,
-      "triangles": 10318,
-      "meshes": 6
+    "kid": {
+      "bytes": 137588,
+      "triangles": 30048,
+      "meshes": 45
     },
-    "apple": {
-      "bytes": 75652,
-      "triangles": 1896,
-      "meshes": 4
+    "adult": {
+      "bytes": 137864,
+      "triangles": 30048,
+      "meshes": 45
     },
-    "book": {
-      "bytes": 100440,
-      "triangles": 2104,
-      "meshes": 5
-    },
-    "coins": {
-      "bytes": 268148,
-      "triangles": 10184,
-      "meshes": 2
-    },
-    "boat": {
-      "bytes": 79848,
-      "triangles": 1176,
-      "meshes": 6
-    },
-    "tin": {
-      "bytes": 85388,
-      "triangles": 2088,
-      "meshes": 4
-    },
-    "blanket": {
-      "bytes": 128116,
-      "triangles": 3768,
-      "meshes": 2
-    },
-    "rattle": {
-      "bytes": 117824,
-      "triangles": 3600,
-      "meshes": 4
-    },
-    "plant": {
-      "bytes": 110556,
-      "triangles": 2696,
-      "meshes": 4
-    },
-    "letter": {
-      "bytes": 45656,
-      "triangles": 1269,
-      "meshes": 5
-    },
-    "ball": {
-      "bytes": 127396,
-      "triangles": 5040,
-      "meshes": 2
+    "elder": {
+      "bytes": 137600,
+      "triangles": 30048,
+      "meshes": 45
     }
+  },
+  "low": {
+    "nursery": {
+      "bytes": 164784,
+      "triangles": 15328,
+      "meshes": 5
+    },
+    "gardens": {
+      "bytes": 176040,
+      "triangles": 12638,
+      "meshes": 8
+    },
+    "schoolyard": {
+      "bytes": 137712,
+      "triangles": 10346,
+      "meshes": 5
+    },
+    "pier": {
+      "bytes": 268196,
+      "triangles": 32764,
+      "meshes": 21
+    },
+    "storm": {
+      "bytes": 197016,
+      "triangles": 23844,
+      "meshes": 11
+    },
+    "station": {
+      "bytes": 156676,
+      "triangles": 13138,
+      "meshes": 6
+    },
+    "workplace": {
+      "bytes": 206708,
+      "triangles": 15530,
+      "meshes": 19
+    },
+    "rooftop": {
+      "bytes": 279732,
+      "triangles": 23308,
+      "meshes": 5
+    },
+    "kitchen": {
+      "bytes": 170616,
+      "triangles": 13366,
+      "meshes": 6
+    },
+    "square": {
+      "bytes": 184668,
+      "triangles": 16370,
+      "meshes": 6
+    },
+    "cottage": {
+      "bytes": 152436,
+      "triangles": 12330,
+      "meshes": 5
+    },
+    "clifftop": {
+      "bytes": 144136,
+      "triangles": 14802,
+      "meshes": 17
+    },
+    "harbour": {
+      "bytes": 675364,
+      "triangles": 42266,
+      "meshes": 13
+    },
+    "props": {
+      "bytes": 121096,
+      "triangles": 7548,
+      "meshes": 50
+    },
+    "baby": {
+      "bytes": 30292,
+      "triangles": 2524,
+      "meshes": 21
+    },
+    "kid": {
+      "bytes": 78068,
+      "triangles": 9014,
+      "meshes": 45
+    },
+    "adult": {
+      "bytes": 77948,
+      "triangles": 9014,
+      "meshes": 45
+    },
+    "elder": {
+      "bytes": 78272,
+      "triangles": 9014,
+      "meshes": 45
+    }
+  },
+  "totals": {
+    "full": 5605900,
+    "low": 3299760
   }
 }

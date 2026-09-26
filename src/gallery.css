@@ -8,8 +8,8 @@
 }
 body {
   margin: 0;
-  background: #e9ecdc;
-  color: #234c43;
+  background: #1d2340;
+  color: #1d2340;
   font:
     14px DM,
     system-ui,
@@ -26,6 +26,12 @@ header {
   gap: 30px;
   padding: 22px 5%;
   z-index: 1;
+  background: #fffaf0;
+  border-bottom: 3px solid #1d2340;
+}
+footer {
+  background: #fffaf0;
+  border-top: 3px solid #1d2340;
 }
 a {
   color: inherit;
@@ -58,7 +64,7 @@ button {
   border: 1px solid #b5c0a9;
   border-radius: 12px;
   background: #fff9eb;
-  color: #234c43;
+  color: #1d2340;
   padding: 10px 14px;
 }
 button {
