@@ -1,7 +1,8 @@
 {
-  "at": "2026-09-26T06:30:30.553Z",
+  "at": "2026-09-30T13:46:30.848Z",
   "base": "http://127.0.0.1:4197/",
   "checks": [
+    "title: settings switches, and the customise sheet",
     "title → customise → begin a new life → chapter card",
     "walk to Nana June, choose the first kite, the main story is free",
     "the first-steps hunt: start costs an hour, three items found by walking, keepsake awarded",

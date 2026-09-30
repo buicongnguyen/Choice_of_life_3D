@@ -188,3 +188,32 @@ test("a finished life still replays after choosing a kite (style is not part of 
   assert.deepEqual(back.log, l.log);
   assert.ok(record(back, 0).complete);
 });
+
+test("an activity spent with someone counts as time with them (no drift for that bond)", () => {
+  // chapter 4: fly the festival kite with Dad, then only the main story
+  const upTo = (activity: boolean) => {
+    let l = life(41, false, 3);
+    const go = (a: string) => {
+      const n = act(l, a);
+      assert.notEqual(n, l, a);
+      l = n;
+    };
+    const a = chapterOf(l).activity;
+    assert.equal(a.who, "dad");
+    if (activity) {
+      go("start");
+      go("kite:soar");
+    }
+    const m = mainMoment(l);
+    go(talkAction(m.id, visibleOptions(l, m).filter(([o]) => optionOpen(l, o))[0][1]));
+    const family = l.bonds.family;
+    go("next");
+    return { l, family };
+  };
+  const withDad = upTo(true);
+  assert.ok(withDad.family > 0);
+  assert.ok(!withDad.l.drift.includes("family"), `family cooled after an hour with Dad: ${withDad.l.drift}`);
+  const alone = upTo(false);
+  assert.ok(alone.family > 0);
+  assert.ok(alone.l.drift.includes("family"), "without that hour (and no family moment), family still cools");
+});

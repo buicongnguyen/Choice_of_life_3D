@@ -1,4 +1,4 @@
-# Choice of Life: Kitehaven — evaluation and redesign (1.0.0, 1.1.0, 1.2.0)
+# Choice of Life: Kitehaven — evaluation and redesign (1.0.0 → 1.3.0)
 
 This release replaces the 0.3 "little world of choices" with a new story, new rules,
 twelve new Blender dioramas, new characters, a new renderer look and a new interface.
@@ -271,4 +271,94 @@ line that changes with your earlier choices), 287 interface strings, and the end
 - **Picking a language:** it's detected from the browser. You can change it on the title
   screen or in Pause, which reloads the page and keeps your life.
 - **Adding a language:** see [docs/i18n/README.md](i18n/README.md).
+
+## 7. 1.3.0: a touch-first interface, with Blender UI art
+
+### The audit
+`scripts/audit-mobile.mjs` opens every screen at phone portrait (390 × 844, 360 × 740), phone
+landscape (844 × 390), tablet (820 × 1180) and laptop (1366 × 768) sizes. It measures tap
+targets under 44 px, text under 12 px, sideways scrolling and buttons pushed off-screen.
+
+| Problem | Before (1.2.1) | After (1.3.0) |
+| --- | --- | --- |
+| Tap targets under 44 px, title screen | 27 | 0 |
+| Tap targets under 44 px, kite workshop | 11 | 0 |
+| Text under 12 px, phone HUD | 6 | 0 |
+| Customising your look | the card covered your own avatar | the avatar is framed above (or beside) the sheet |
+| Settings | inside "Make it yours" and as button labels ("Close-ups: on") | one grouped panel with switches and segmented choices |
+| Phone held sideways | the start button and dialog choices were cut off | a compact title, and words and choices in two columns |
+| Journal tabs on phones | wrapped onto two rows | one scrolling row with icons |
+| Movement on touch screens | a four-button D-pad | a thumb stick |
+
+The only targets left under 44 px are the dialog's page dots (26–32 px, above the WCAG 2.2
+minimum of 24 px). They're a shortcut, not the only way to move through a conversation.
+
+### Is Blender the right tool for UI?
+Yes for **pictures**, and no for **buttons and words**. Text, buttons and panels stay HTML/CSS, so
+they stay sharp at any size, scale with the text-size setting, work with screen readers and hold
+Vietnamese and Korean. Everything pictorial comes from Blender: 28 toy-style icons (stats,
+journal, map pin, kite, album, gear, speaker, music, globe, clapperboard, trophy…) and the title
+emblem (the lighthouse and your kite on a badge).
+
+The generator is `art/ui/build_ui.py`, and `scripts/ui-art.py` converts its output to WebP in
+`public/ui` (158 KB for all 29 images). The art matches the dioramas: puffy extruded shapes and
+bevelled primitives in the game's palette, soft studio light, the Standard view transform so
+colours stay vivid, and an ink outline that echoes the ink borders of the HTML.
+- **Outline:** an inverted hull whose material is visible to camera rays only, so it never
+  shadows the icon inside it.
+- **Rounded corners:** every corner is filleted before bevelling, so shapes never fold into
+  spikes.
+
+### What changed
+- **Entering the game:** the emblem crowns the title card, with one clear main button (and "Begin
+  a new life" under it once you have a save). A dock of icon buttons offers Make it yours,
+  Album, Settings and Sound.
+- **Make it yours:** a sheet with name, hair, skin and colour. The camera moves in to your avatar,
+  which turns slowly so you can see the hair from every side. The title card steps aside while
+  you customise.
+- **Settings:** one panel from the title or from Pause:
+  - Game: language, walking pace.
+  - Display: graphics, text size, conversation close-ups, reduced motion.
+  - Sound: sound, music.
+
+  Each row has a Blender icon and a switch or segmented choice. Language and graphics still
+  reload only after your life and the new setting are saved.
+- **Pause:** Resume, then tiles for Settings, Journal, Read the chapter card and Save and
+  return to title. The keyboard help is folded away, and hidden on touch screens.
+- **The kite workshop (the "shop"):**
+  - It opens from the HUD's kite button as well as the journal.
+  - A sky stage shows your kite, and every pattern card is the same size.
+  - "Flying now" marks the one you've equipped. Locked cards carry a lock badge; tap one to
+    see how to earn it.
+- **The HUD on phones:**
+  - Top: a chapter badge, stats with 3D icons, and a compact quest.
+  - Bottom left: a thumb stick.
+  - Bottom right: a big action button with an icon.
+  - Along the bottom: a dock (Go to, Journal with its count, Kite, Sound, Pause).
+- **Phones held sideways:**
+  - The HUD fits on one line, and the title card is compact with the dock beside it.
+  - Dialogs show the words on the left and the choices on the right.
+  - Sheets open from the side.
+- **Safe areas and fonts:** notched phones get safe-area padding, and nothing a player has to
+  read is under 12 px.
+
+### Code and logic review (fixed)
+A separate review pass replayed 400 random lives (about 6,900 actions) and checked that every
+save round-trips; it found no rule-breaking bugs. It did find these defects, now fixed:
+1. **Unreadable saves from a bad draft:** a corrupted name/look draft in the settings could
+   start a life whose save could never load. The draft is now validated.
+2. **Activities didn't count as time together:** flying the festival kite with Dad or boarding
+   up with Mum now counts as time with family, so that bond no longer cools. Old saves still
+   load, because every gate is "at least N". The 400-life balance run is unchanged.
+3. **Wrong position after a failed load:** after a chapter failed to load, saving could copy the
+   previous scene's position into the new chapter. Position is now saved only from the chapter
+   the world is actually showing.
+4. **Camera on the wrong person:** finishing a hunt could point the camera at whoever you last
+   spoke to.
+5. **Stale error on the title:** returning to the title after a failed load still showed the
+   error and its "Try again" button.
+6. **Lost customisation:** toggling sound or motion on the title dropped your unsaved name/look
+   draft.
+7. **Hard-coded English and wrong labels:** the page title and the 3D view's label are now
+   translated. The last chapter (no clock) no longer says side moments cost "1 hour".
 

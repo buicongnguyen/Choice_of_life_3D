@@ -1,6 +1,7 @@
 import "./style.css";
 import "./conversation.css";
 import "./features.css";
+import "./design.css";
 import { World, type Place } from "./world";
 import { graphicsQuality, type GraphicsQuality } from "./graphics";
 import { KiteGame } from "./kite-game";
@@ -21,13 +22,14 @@ import {
   newLife,
   parseLife,
   record,
+  validIdentity,
   serialise,
   talkAction,
   visibleOptions,
   type Identity,
   type Life,
 } from "./core";
-import { activityUI, albumUI, briefingUI, endingUI, esc, exploreUI, huntUI, journalUI, momentUI, pauseUI, playUI, responseUI, restartUI, titleUI, chips, statInfo, bondName, type BeatState } from "./ui";
+import { activityUI, albumUI, briefingUI, customiseUI, endingUI, esc, settingsUI, exploreUI, huntUI, journalUI, momentUI, pauseUI, playUI, responseUI, restartUI, titleUI, chips, statInfo, bondName, type BeatState } from "./ui";
 import { beats, wordCount } from "./beats";
 import { askingMood, replyMood } from "./moods";
 import { cue, blip, voicePitch, setAmbience, setEnabled, stopAmbience, setMusic, setMusicOn } from "./audio";
@@ -41,7 +43,7 @@ import type { Effect } from "./content";
 const ui = document.querySelector<HTMLElement>("#ui")!;
 const host = document.querySelector<HTMLElement>("#world")!;
 const announcer = document.querySelector<HTMLElement>("#announcer")!;
-type Panel = "none" | "moment" | "response" | "activity" | "briefing" | "explore" | "journal" | "pause" | "restart" | "album";
+type Panel = "none" | "moment" | "response" | "activity" | "briefing" | "explore" | "journal" | "pause" | "restart" | "album" | "customise" | "settings";
 
 // ---------------------------------------------------------------------------
 // language first: saves replay their story text, so the words must be in place before
@@ -65,6 +67,8 @@ if (wanted !== "en") {
   }
 }
 document.documentElement.lang = lang;
+document.title = u("page.title");
+document.querySelector("#world")?.setAttribute("aria-label", u("page.world"));
 
 // ---------------------------------------------------------------------------
 // persistent state
@@ -95,7 +99,10 @@ let briefingReopened = false;
 let beatShownAt = 0;
 let beatKey = "";
 let blipTimers: number[] = [];
-let makeOpen = !saved && innerWidth > 760;
+/** Where Settings returns to (it opens from the title and from Pause). */
+let settingsFrom: Panel = "none";
+/** A locked kite pattern the player asked about (its unlock hint shows in the workshop). */
+let kiteHint = "";
 let padPointer: number | null = null;
 let loading = true,
   loadError = "",
@@ -111,6 +118,9 @@ let sound = false,
   reduced = matchMedia("(prefers-reduced-motion: reduce)").matches,
   kiteAssist = false;
 const phone = matchMedia("(pointer: coarse)").matches && Math.min(screen.width, screen.height) <= 900;
+/** Touch screens get the stick and no keyboard help. */
+const touchUI = matchMedia("(pointer: coarse)").matches;
+document.body.classList.toggle("touch", touchUI);
 let graphics: GraphicsQuality = graphicsQuality(undefined, phone);
 let album: Album = emptyAlbum();
 try {
@@ -131,7 +141,8 @@ try {
   pace = typeof stored.pace === "string" && ["gentle", "normal", "brisk"].includes(stored.pace) ? stored.pace : "normal";
   reduced = typeof stored.reduced === "boolean" ? stored.reduced : reduced;
   const draft = stored.setupDraft as Partial<Identity> | undefined;
-  if (!saved && draft && typeof draft.name === "string") identity = { ...identity, ...draft };
+  const drafted = { ...identity, ...draft };
+  if (!saved && draft && validIdentity(drafted)) identity = drafted;
 } catch {}
 
 let world: World;
@@ -148,7 +159,9 @@ try {
 function prefs(extra: Record<string, unknown> = {}) {
   let persisted = true;
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ sound, music, reduced, pace, largeText, closeups, graphics, kiteAssist, lang, ...extra }));
+    // Keep the title's unsaved name/look draft unless this call replaces it.
+    const setupDraft = "setupDraft" in extra ? extra.setupDraft : mode === "title" && !saved ? identity : undefined;
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ sound, music, reduced, pace, largeText, closeups, graphics, kiteAssist, lang, ...extra, setupDraft }));
   } catch {
     persisted = false;
   }
@@ -167,7 +180,7 @@ const saveText = () => (storageIssue ? u("hud.saveUnavailable") : u("hud.saved")
 function save(updatePosition = true) {
   // Returning to the title must not hide a previous failed progress save.
   if (mode === "title") return !storageIssue;
-  if (updatePosition && !loading) state.position = { x: world.playerPosition.x, z: world.playerPosition.z };
+  if (updatePosition && !loading && world.shownChapter === state.chapter) state.position = { x: world.playerPosition.x, z: world.playerPosition.z };
   try {
     localStorage.setItem(SAVE_KEY, serialise(state));
     saved = state;
@@ -226,9 +239,11 @@ function panelUI() {
   if (panel === "response") return responseUI(response.title, beat, response.text, response.effect, state, response.note, response.who);
   if (panel === "activity") return activityUI(state, { active: !!kite, assist: kiteAssist });
   if (panel === "briefing") return briefingUI(state, firstBriefing && state.chapter === 0, beat, briefingReopened);
-  if (panel === "explore") return exploreUI(world.places());
-  if (panel === "journal") return journalUI(state, journalTab, album);
-  if (panel === "pause") return pauseUI({ storage: storageIssue, graphics, largeText, reduced, sound, music, closeups, lang });
+  if (panel === "explore") return exploreUI(world.places(), chapterOf(state).free > 50);
+  if (panel === "journal") return journalUI(state, journalTab, album, kiteHint);
+  if (panel === "pause") return pauseUI({ storage: storageIssue, touch: touchUI });
+  if (panel === "customise") return customiseUI(identity);
+  if (panel === "settings") return settingsUI({ lang, graphics, pace, largeText, closeups, reduced, sound, music, version: __GAME_VERSION__ });
   if (panel === "restart") return restartUI();
   if (panel === "album") return albumUI(album);
   return "";
@@ -244,10 +259,10 @@ function render(focus = false) {
   document.body.dataset.panel = panel;
   const screen =
     mode === "title"
-      ? titleUI({ saved, identity, loading, loadError, legacy, invalid: invalidSave, storage: storageIssue, pace, graphics, sound, reduced, makeOpen, lang, album: album.lives.length })
+      ? titleUI({ saved, loading, loadError, legacy, invalid: invalidSave, storage: storageIssue, sound, album: album.lives.length })
       : mode === "ending"
         ? endingUI(state, { canShare: canShareFiles(), album: album.lives.length > 0 })
-        : playUI(state, { hunt: huntUI(state), notice, saveStatus: saveText() });
+        : playUI(state, { hunt: huntUI(state), notice, saveStatus: saveText(), sound });
   const loadingCover = mode === "play" && loading ? `<div class="cover" role="status"><span class="spinner"></span>${u("cover.loading")}</div>` : "";
   const errorCover = mode === "play" && loadError ? `<div class="cover"><p>${esc(loadError)}</p><button class="primary" data-action="retry">${u("title.retry")}</button></div>` : "";
   ui.innerHTML = `<div class="screen" ${panel !== "none" ? "inert" : ""}>${screen}</div>${panelUI()}${loadingCover}${errorCover}`;
@@ -400,9 +415,22 @@ function ambience() {
 }
 
 function layoutWorld() {
-  const dialog = ui.querySelector<HTMLElement>(".dialog");
-  world.setInset(mode === "play" && dialog ? Math.max(0, innerHeight - dialog.getBoundingClientRect().top) : 0);
+  // Whatever covers the bottom of the screen pushes the 3D subject up into the open space:
+  // a dialog in play, the customise sheet or (on tall phones) the title card on the title.
+  const cover =
+    mode === "play"
+      ? ui.querySelector<HTMLElement>(".dialog")
+      : mode === "title"
+        ? (ui.querySelector<HTMLElement>(".sheet.customise") ?? (innerWidth <= 760 && innerHeight > innerWidth && panel === "none" ? ui.querySelector<HTMLElement>(".title-card") : null))
+        : null;
+  // Layout boxes, not the on-screen rect: sheets and dialogs slide in, and the camera should
+  // frame the space they will leave free, not the space they leave mid-animation.
+  const r = cover ? { top: cover.offsetTop, left: cover.offsetLeft, height: cover.offsetHeight } : null;
+  // A sheet that hugs the right edge (desktop, sideways phones) covers the right; one at the bottom covers the bottom.
+  const side = !!r && r.left > innerWidth * 0.35 && r.height > innerHeight * 0.6;
+  world.setInset(r && !side ? Math.max(0, innerHeight - r.top) : 0, r && side ? Math.max(0, innerWidth - r.left) : 0);
 }
+ui.addEventListener("animationend", layoutWorld);
 new ResizeObserver(layoutWorld).observe(document.body);
 
 function nearby(place?: Place) {
@@ -420,7 +448,7 @@ function refreshHud() {
   if (mode !== "play" || panel !== "none") return render();
   // Replace only the HUD pieces so a held key or a walking route survives.
   const fresh = document.createElement("div");
-  fresh.innerHTML = playUI(state, { hunt: huntUI(state), notice, saveStatus: saveText() });
+  fresh.innerHTML = playUI(state, { hunt: huntUI(state), notice, saveStatus: saveText(), sound });
   for (const sel of [".stats", ".quest", ".hunt", ".hud-bottom"]) {
     const now = ui.querySelector(sel),
       next = fresh.querySelector(sel);
@@ -569,6 +597,7 @@ function collect(place: Place) {
 function activityResult() {
   const m = state.memories.at(-1)!;
   const a = chapterOf(state).activity;
+  focusId = a.who ? world.placeOf(a.who) : null;
   response = { title: a.keepsake, text: m.text, effect: m.effect, note: u("note.keepsake"), who: undefined };
   panel = "response";
   setBeats(textBeats(response.text));
@@ -708,6 +737,60 @@ ui.addEventListener("click", async (event) => {
       if (mode === "play" && panel === "none") refreshHud();
       else render();
       break;
+    case "customise":
+      panel = "customise";
+      world.setTitleView("avatar");
+      render(true);
+      break;
+    case "settings":
+      settingsFrom = panel === "pause" ? "pause" : "none";
+      panel = "settings";
+      render(true);
+      break;
+    case "toggle": {
+      const key = target.dataset.key;
+      if (key === "sound") sound = !sound;
+      else if (key === "music") music = !music;
+      else if (key === "closeups") closeups = !closeups;
+      else if (key === "reduced") reduced = !reduced;
+      else break;
+      prefs();
+      if (key === "sound" || key === "music") {
+        cue();
+        ambience();
+      }
+      render();
+      ui.querySelector<HTMLElement>(`[data-action="toggle"][data-key="${key}"]`)?.focus();
+      break;
+    }
+    case "set": {
+      const key = target.dataset.key,
+        value = target.dataset.value ?? "";
+      if (key === "lang") {
+        const next = pickLang(value);
+        if (next !== lang) reloadingSetting({ lang: next });
+      } else if (key === "graphics") {
+        const next = graphicsQuality(value, phone);
+        if (next !== graphics) reloadingSetting({ graphics: next });
+      } else if (key === "pace" && ["gentle", "normal", "brisk"].includes(value)) {
+        pace = value;
+        prefs();
+        render();
+      } else if (key === "text") {
+        largeText = value === "large";
+        prefs();
+        render();
+      }
+      ui.querySelector<HTMLElement>(`[data-action="set"][data-key="${key}"][data-value="${CSS.escape(value)}"]`)?.focus();
+      break;
+    }
+    case "kite-open":
+      journalTab = "kite";
+      kiteHint = "";
+      panel = "journal";
+      save();
+      render(true);
+      break;
     case "motion":
       reduced = !reduced;
       prefs();
@@ -727,9 +810,12 @@ ui.addEventListener("click", async (event) => {
       world.interact();
       break;
     case "close":
-      panel = mode === "play" || panel !== "restart" ? "none" : "none";
+      if (panel === "customise") world.setTitleView("wide");
+      panel = panel === "settings" ? settingsFrom : "none";
+      settingsFrom = "none";
       activeMoment = null;
-      render();
+      kiteHint = "";
+      render(panel !== "none");
       break;
     case "pause":
     case "journal":
@@ -767,6 +853,7 @@ ui.addEventListener("click", async (event) => {
       save();
       mode = "title";
       panel = "none";
+      loadError = "";
       render(true);
       ambience();
       void world.showTitle(identity, saved ? kiteLook(saved) : undefined);
@@ -830,7 +917,16 @@ ui.addEventListener("click", async (event) => {
       break;
     case "kite-pattern": {
       const p = target.dataset.value ?? "";
-      if (isPattern(p) && unlocked(state, p) && state.style.pattern !== p) {
+      if (isPattern(p) && !unlocked(state, p)) {
+        // A locked pattern explains how to earn it instead of doing nothing.
+        kiteHint = p;
+        cue();
+        render();
+        ui.querySelector<HTMLElement>(`[data-action="kite-pattern"][data-value="${p}"]`)?.focus();
+        break;
+      }
+      kiteHint = "";
+      if (isPattern(p) && state.style.pattern !== p) {
         state = { ...state, style: { ...state.style, pattern: p } };
         cue("find");
         save(false);
@@ -877,45 +973,18 @@ ui.addEventListener("pointerdown", (e) => {
   }
 });
 
-function changeReloadingSetting(input: HTMLInputElement, current: string, extra: Record<string, unknown>) {
+/** Language and graphics reload the page, and only once the life and the new setting are safe. */
+function reloadingSetting(extra: Record<string, unknown>) {
   ui.querySelector("[data-reload-error]")?.remove();
   if (reloadAfterSaving(save, () => prefs({ ...extra, setupDraft: mode === "title" ? identity : undefined }), () => location.reload())) return;
-  input.value = current;
+  prefs(); // put the stored settings back as they were
   const warning = document.createElement("p");
   warning.className = "note warn";
   warning.dataset.reloadError = "";
   warning.setAttribute("role", "alert");
   warning.textContent = u("settings.reloadBlocked");
-  (input.closest("label") ?? input).insertAdjacentElement("afterend", warning);
+  ui.querySelector(".sheet-body")?.prepend(warning);
 }
-
-ui.addEventListener("change", (event) => {
-  const input = event.target as HTMLInputElement;
-  if (input.name === "graphics") {
-    const next = graphicsQuality(input.value, phone);
-    if (next === graphics) return;
-    changeReloadingSetting(input, graphics, { graphics: next });
-    return;
-  }
-  if (input.name === "pace") {
-    pace = input.value;
-    prefs();
-  }
-  if (input.name === "lang") {
-    const next = pickLang(input.value);
-    if (next === lang) return;
-    changeReloadingSetting(input, lang, { lang: next });
-  }
-});
-// Remember whether "Make it yours" is open so re-rendering the title never collapses it.
-ui.addEventListener(
-  "toggle",
-  (event) => {
-    const d = event.target as HTMLDetailsElement;
-    if (d.classList?.contains("make")) makeOpen = d.open;
-  },
-  true,
-);
 ui.addEventListener("input", (event) => {
   const input = event.target as HTMLInputElement;
   if (input.name === "name") {
@@ -924,19 +993,44 @@ ui.addEventListener("input", (event) => {
   }
 });
 
+// The thumb stick: press anywhere on it and drag; the knob follows your thumb, up to its rim.
+function steer(stick: HTMLElement, event: PointerEvent) {
+  const r = stick.getBoundingClientRect();
+  const max = r.width / 2;
+  let dx = event.clientX - (r.left + max),
+    dy = event.clientY - (r.top + max);
+  const len = Math.hypot(dx, dy);
+  if (len > max) {
+    dx = (dx / len) * max;
+    dy = (dy / len) * max;
+  }
+  stick.style.setProperty("--kx", `${dx}px`);
+  stick.style.setProperty("--ky", `${dy}px`);
+  const dead = len < max * 0.18;
+  world.pad(dead ? 0 : dx / max, dead ? 0 : dy / max);
+}
 ui.addEventListener("pointerdown", (event) => {
-  const target = (event.target as HTMLElement).closest<HTMLElement>("[data-pad]");
-  if (!target || !world.active || padPointer !== null) return;
+  const stick = (event.target as HTMLElement).closest<HTMLElement>("[data-stick]");
+  if (!stick || !world.active || padPointer !== null) return;
   event.preventDefault();
   padPointer = event.pointerId;
-  const [x, y] = target.dataset.pad!.split(",").map(Number);
-  target.setPointerCapture(event.pointerId);
-  world.pad(x, y);
+  stick.setPointerCapture(event.pointerId);
+  stick.classList.add("held");
+  steer(stick, event);
+});
+ui.addEventListener("pointermove", (event) => {
+  if (event.pointerId !== padPointer) return;
+  const stick = ui.querySelector<HTMLElement>("[data-stick]");
+  if (stick) steer(stick, event);
 });
 for (const ev of ["pointerup", "pointercancel", "lostpointercapture"] as const)
   ui.addEventListener(ev, (event) => {
     if (event.pointerId !== padPointer) return;
     padPointer = null;
+    const stick = ui.querySelector<HTMLElement>("[data-stick]");
+    stick?.classList.remove("held");
+    stick?.style.setProperty("--kx", "0px");
+    stick?.style.setProperty("--ky", "0px");
     world.pad(0, 0);
   });
 
@@ -957,9 +1051,11 @@ window.addEventListener("keydown", (event) => {
     }
     return;
   }
-  if (event.key === "Escape" && mode !== "play" && panel !== "none") {
+  if (event.key === "Escape" && (panel === "settings" || panel === "customise" || (mode !== "play" && panel !== "none"))) {
     event.preventDefault();
-    panel = "none";
+    if (panel === "customise") world.setTitleView("wide");
+    panel = panel === "settings" ? settingsFrom : "none";
+    settingsFrom = "none";
     render(true);
     return;
   }

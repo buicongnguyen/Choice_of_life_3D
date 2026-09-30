@@ -156,6 +156,8 @@ export class World {
   private hover = "";
   private graphics;
   private titleMode = false;
+  /** On the title: the wide festival shot, or a close-up of your avatar while you customise. */
+  private titleView: "wide" | "avatar" = "wide";
   private titleKite?: T.Object3D;
   private release?: T.Object3D;
   private skyKite?: { obj: T.Group; key: string };
@@ -479,7 +481,8 @@ export class World {
     this.addBackdrop(harbour, this.layouts.pier?.backdrop ?? { x: -12, y: -5, z: -30, s: 1.4, variant: "old" });
     this.addSea("pier", this.layouts.pier);
     this.player = this.makeActor(adult, playerLook(identity, 6), "you");
-    this.player.root.position.set(-1.2, 0, 3.3);
+    // clear of the lamp post, so the customise close-up sees your whole avatar
+    this.player.root.position.set(-0.25, 0, 3.45);
     this.player.root.rotation.y = 0.55;
     this.cast.add(this.player.root);
     void props;
@@ -489,6 +492,7 @@ export class World {
     this.fx.add(k);
     this.titleKite = k;
     this.addWeather("festival");
+    this.titleView = "wide";
     this.camTarget.set(-3.4, 1.9, 2.6);
     this.camDist = this.camGoalDist = 12;
     this.intro = 0;
@@ -1026,11 +1030,12 @@ export class World {
     this.camera.aspect = aspect;
     this.camera.fov = aspect < 0.75 ? 44 : aspect < 1.2 ? 36 : 30;
     // Shift the picture up by half the covered strip so the subject sits in the open space.
-    if (this.inset > 0 && this.focusPoint) this.camera.setViewOffset(w, h, 0, Math.min(this.inset * 0.5, h * 0.3), w, h);
+    if ((this.inset > 0 || this.insetRight > 0) && (this.focusPoint || this.titleMode))
+      this.camera.setViewOffset(w, h, Math.min(this.insetRight * 0.5, w * 0.3), Math.min(this.inset * 0.5, h * (this.titleMode ? 0.36 : 0.3)), w, h);
     else this.camera.clearViewOffset();
     this.camera.updateProjectionMatrix();
     const base = aspect < 0.75 ? 20 : aspect < 1.2 ? 18 : 16.5;
-    this.camGoalDist = this.titleMode ? (aspect < 0.9 ? 18 : 12) : this.focusPoint ? base * 0.52 : base;
+    this.camGoalDist = this.titleMode ? (this.titleView === "avatar" ? (aspect < 0.9 ? 6.4 : 5.2) : aspect < 0.9 ? 13 : 12) : this.focusPoint ? base * 0.52 : base;
     if (!this.titleMode && !this.focusPoint && this.intro === 0 && Math.abs(this.camDist - this.camGoalDist) > 8) this.camDist = this.camGoalDist;
     this.placeCamera();
     this.render();
@@ -1145,6 +1150,22 @@ export class World {
     this.renderer.setViewport(0, 0, w, h);
     this.fx.visible = fxWasVisible;
     this.render();
+  }
+
+  /** The chapter the world is actually showing (-1 on the title or before the first scene). */
+  get shownChapter() {
+    return this.titleMode || !this.state || !this.player ? -1 : this.state.chapter;
+  }
+
+  /** The interactive place of a person, if they're in this scene. */
+  placeOf(who: string) {
+    return this.points.find((p) => p.place.who === who)?.place.id ?? null;
+  }
+
+  setTitleView(view: "wide" | "avatar") {
+    if (this.titleView === view) return;
+    this.titleView = view;
+    this.resize();
   }
 
   /**
@@ -1462,7 +1483,21 @@ export class World {
       this.release.rotation.z = Math.sin(t * 2) * 0.3;
     }
     // camera
-    if (!this.titleMode) {
+    if (this.titleMode) {
+      // the festival shot, or your avatar turning slowly while you dress them
+      const aspect = this.host.clientWidth / Math.max(1, this.host.clientHeight);
+      const goal =
+        this.titleView === "avatar" && this.player
+          ? this.player.root.position.clone().add(new T.Vector3(0, aspect < 0.9 ? 0.95 : 0.85, 0))
+          : aspect < 0.9
+            ? new T.Vector3(-2.3, 2.1, 2.9)
+            : new T.Vector3(-3.4, 1.9, 2.6);
+      this.camTarget.lerp(goal, 1 - Math.exp(-adt * 3));
+      if (this.player && !this.reducedMotion) {
+        const want = this.titleView === "avatar" ? 0.51 + Math.sin(t * 0.7) * 0.45 : 0.55;
+        this.player.root.rotation.y += (want - this.player.root.rotation.y) * Math.min(1, adt * 3);
+      }
+    } else {
       const goal = this.focusPoint ?? this.followTarget();
       this.camTarget.lerp(goal, 1 - Math.exp(-adt * (this.focusPoint ? 5 : 3.2)));
       this.intro = Math.max(0, this.intro - adt * 0.45);
@@ -1481,9 +1516,12 @@ export class World {
 
   /** Pixels at the bottom of the view covered by a dialog; the framing shifts above it. */
   private inset = 0;
-  setInset(px: number) {
-    if (Math.abs(px - this.inset) < 2) return;
+  /** Pixels covered on the right (a side sheet); the framing shifts left of it. */
+  private insetRight = 0;
+  setInset(px: number, right = 0) {
+    if (Math.abs(px - this.inset) < 2 && Math.abs(right - this.insetRight) < 2) return;
     this.inset = px;
+    this.insetRight = right;
     this.resize();
   }
 

@@ -6,7 +6,7 @@ choice you make decides who is still holding the string with you at the end.
 
 - [Play the game](https://buicongnguyen.github.io/Choice_of_life_3D/)
 - [Inspect every model](https://buicongnguyen.github.io/Choice_of_life_3D/asset-gallery.html)
-- [Why and how the game was redesigned (1.0 → 1.2)](docs/KITEHAVEN_REDESIGN.md)
+- [Why and how the game was redesigned (1.0 → 1.3)](docs/KITEHAVEN_REDESIGN.md)
 - Play in English, **Tiếng Việt** or **한국어** (title screen → Make it yours → Language)
 - [Art direction and the Blender pipeline](art/ART_DIRECTION.md)
 
@@ -33,9 +33,11 @@ choice you make decides who is still holding the string with you at the end.
 - **An album of lives:** every ending you've found, who came to each last festival, and a
   picture card to save or share. The journal's **Paths** tab shows the roads not taken.
 - **Three languages:** English, Vietnamese and Korean, the whole story included.
+- **Touch-first interface:** a thumb stick, an icon dock, sheets for settings and customising,
+  and 3D toy icons rendered in Blender (`art/ui`).
 
 ## Controls
-WASD or the arrow keys to walk, or tap or click the ground. **E** or **Space** to talk or act.
+WASD or the arrow keys to walk, or tap or click the ground (on touch screens, drag the thumb stick). **E** or **Space** to talk or act.
 In conversations, **click, Space or Enter** shows the next line and **1–5** chooses; **J** for the journal, **Esc** to pause. **Go to…** walks you to anyone or
 anything automatically. On touch screens, use the pad or tap to walk. The kite game: hold to
 pull the line in, release to let it out. It has a "Steady hands" assist and a skip.

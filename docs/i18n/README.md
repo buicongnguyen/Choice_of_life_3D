@@ -6,14 +6,14 @@ regenerated with `npx tsx scripts/i18n-template.mts`:
 
 - `story`: 830 paths. Each has either `text` (an English string) or `function` (the English
   function source, for lines that depend on earlier choices).
-- `ui`: 287 interface strings (from `src/i18n.ts`).
+- `ui`: 294 interface strings (from `src/i18n.ts`).
 - The **lexicon** (kite colours, careers, vote allies, keepsakes, ending titles and the
   ending epilogue function) is in `src/content.ts` at `export const lexicon = {`.
 
 ## Files (xx = `vi` or `ko`)
 ```
 src/lang/xx/index.ts     assembles and default-exports the Overlay
-src/lang/xx/ui.ts        export default { "title.kicker": "…", … }   (all 287 keys)
+src/lang/xx/ui.ts        export default { "title.kicker": "…", … }   (all 294 keys)
 src/lang/xx/lexicon.ts   export default { kite, career, ally, keepsake, archetype, endingLines }
 src/lang/xx/story-1.ts   export default { "ch1.title": "…", … }  chapters 1–6 (+ their activities and finds)
 src/lang/xx/story-2.ts   chapters 7–12 (+ their activities and finds)

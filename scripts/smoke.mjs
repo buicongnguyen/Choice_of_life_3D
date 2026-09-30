@@ -90,8 +90,25 @@ async function continueSaved(page) {
 // ---------------------------------------------------------------------------
 {
   const page = await open();
+  // settings from the title: switches flip and stick
+  await page.locator('.title-dock [data-action="settings"]').click();
+  await panel(page, "settings");
+  const motion = page.locator('[data-action="toggle"][data-key="reduced"]');
+  const motionBefore = await motion.getAttribute("aria-checked");
+  await motion.click();
+  assert.notEqual(await motion.getAttribute("aria-checked"), motionBefore, "the reduced-motion switch flips");
+  assert.equal(await page.evaluate(() => document.body.classList.contains("reduced")), motionBefore === "false");
+  await motion.click();
+  await page.locator('.sheet [data-action="close"]').click();
+  await panel(page, "none");
+  // make it yours: a sheet with the avatar framed above it
+  await page.locator('.title-dock [data-action="customise"]').click();
+  await panel(page, "customise");
   await page.locator('[data-action="hair"][data-value="5"]').click();
   await page.locator('input[name="name"]').fill("Ari");
+  await page.locator('.sheet header [data-action="close"]').click();
+  await panel(page, "none");
+  check("title: settings switches, and the customise sheet");
   await page.locator('[data-action="start"]').click();
   await ready(page);
   await panel(page, "briefing");
@@ -254,7 +271,32 @@ async function continueSaved(page) {
   assert.equal(d0.render.quality, "low", "phones start on light graphics");
   assert.equal(d0.render.bloom, false);
   await continueSaved(page);
-  assert.ok(await page.locator(".dpad").isVisible());
+  assert.ok(await page.locator(".stick").isVisible(), "phones get the thumb stick");
+  {
+    // drag the stick up and the character walks
+    const box = await page.locator(".stick").boundingBox();
+    const from = (await diag(page)).render.position;
+    const cx = box.x + box.width / 2,
+      cy = box.y + box.height / 2;
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    await page.mouse.move(cx, cy - box.height * 0.45, { steps: 4 });
+    await page.waitForTimeout(700);
+    await page.mouse.up();
+    const to = (await diag(page)).render.position;
+    assert.ok(Math.hypot(to.x - from.x, to.z - from.z) > 0.4, `the stick walks the player (${JSON.stringify(from)} → ${JSON.stringify(to)})`);
+  }
+  // the kite button in the dock opens the workshop; a locked pattern explains itself
+  await page.locator('.hud-bottom [data-action="kite-open"]').click();
+  await panel(page, "journal");
+  assert.equal(await page.locator('[data-tab="kite"]').getAttribute("aria-selected"), "true");
+  const locked = page.locator(".pattern.locked");
+  if (await locked.count()) {
+    await locked.first().click();
+    assert.ok(await page.locator(".kite-hint.on").isVisible(), "tapping a locked pattern shows how to earn it");
+  }
+  await page.locator('[role="dialog"] [data-action="close"]').first().click();
+  await panel(page, "none");
   await travel(page, "person:rowan");
   await panel(page, "moment");
   assert.equal(await page.locator('[data-action="choose"]').count(), 0, "the storm arrives in beats; choices wait for the last one");
@@ -316,8 +358,8 @@ function lifeWithActivities(chapter) {
   await page.locator('[data-action="journal"]').click();
   await panel(page, "journal");
   await page.locator('[data-tab="kite"]').click();
-  assert.ok(await page.locator('[data-action="kite-pattern"][data-value="stripes"]:not(:disabled)').count(), "first steps earned stripes");
-  assert.ok(await page.locator('[data-action="kite-pattern"][data-value="checks"]:disabled').count(), "the rooftop pattern is still locked");
+  assert.ok(await page.locator('.pattern:not(.locked)[data-value="stripes"]').count(), "first steps earned stripes");
+  assert.ok(await page.locator('.pattern.locked[data-value="checks"]').count(), "the rooftop pattern is still locked");
   await page.locator('[data-action="kite-pattern"][data-value="waves"]').click();
   await page.locator('[data-action="kite-trim"][data-value="1"]').click();
   d = await diag(page);
@@ -368,7 +410,7 @@ function lifeWithActivities(chapter) {
   await panel(page, "none");
   await page.locator('[data-action="title"]').click();
   await page.waitForFunction(() => window.lifeDiagnostics.mode === "title");
-  assert.ok(await page.locator('.title-foot [data-action="album"]').isVisible(), "the album is on the title screen");
+  assert.ok(await page.locator('.title-dock [data-action="album"]').isVisible(), "the album is on the title screen");
   check("fireworks, the ending, the picture card and the album of lives");
   await page.close();
 }
@@ -403,8 +445,10 @@ for (const [code, pattern, chapterTitle] of [
   const logBefore = (await diag(page)).done;
   await page.keyboard.press("Escape");
   await panel(page, "pause");
+  await page.locator('.tiles [data-action="settings"]').click();
+  await panel(page, "settings");
   const next = code === "vi" ? "ko" : "en";
-  await Promise.all([page.waitForNavigation(), page.locator('select[name="lang"]').selectOption(next)]);
+  await Promise.all([page.waitForNavigation(), page.locator(`[data-action="set"][data-key="lang"][data-value="${next}"]`).click()]);
   await ready(page);
   assert.equal(await page.evaluate(() => document.documentElement.lang), next);
   await page.locator('[data-action="continue"]').click();

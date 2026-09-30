@@ -45,3 +45,15 @@ It is a quality bar only. Every model here is original and procedurally authored
   `Pier_old`, `Pier_ruined`, `Pier_restored`, `Marina` (harbour).
 - Characters: `Body`, `Head`, `Eyes` (blink), `Mouth_smile` / `Mouth_open` (talking), `ArmL`,
   `ArmR`, `LegL`, `LegR`. `Hair_<style>` and `Acc_<item>` group nodes are shown or hidden.
+
+## Interface art (`art/ui`)
+The HTML interface uses 3D toy icons and a title emblem rendered by `art/ui/build_ui.py`:
+puffy extruded shapes and bevelled primitives in the same palette, an ink outline (an inverted
+hull visible to camera rays only) and Standard colour management. Text never goes into the art;
+buttons and words stay HTML so they can be translated and scaled.
+
+```
+.tools/blender-4.5.0-windows-x64/blender.exe --background --factory-startup --python art/ui/build_ui.py [-- --only heart,kite] [-- --samples 64]
+python scripts/ui-art.py        # art/ui/out/*.png → public/ui/*.webp (160 px icons, 560 px emblem)
+```
+

@@ -253,7 +253,11 @@ function finishActivity(s: Life) {
   Object.assign(s.facts, res.facts ?? {});
   const actual = applyEffect(s, effect);
   s.activities[String(s.chapter)].complete = true;
-  s.memories.push({ id: `a:${s.chapter}`, chapter: s.chapter, title: a.keepsake, text: res.text, detail: res.text, effect: actual, tended: tendedBy(effect) });
+  // An hour spent with someone (flying Dad's kite, boarding up with Mum) is time with them.
+  const withWho = a.who ? bondOf(a.who, s) : null;
+  const tended = tendedBy(effect);
+  if (withWho && !tended.includes(withWho)) tended.push(withWho);
+  s.memories.push({ id: `a:${s.chapter}`, chapter: s.chapter, title: a.keepsake, text: res.text, detail: res.text, effect: actual, tended });
 }
 
 function activityStep(l: Life, verb: string, arg: string): Life | null {

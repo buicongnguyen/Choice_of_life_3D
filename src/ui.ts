@@ -60,6 +60,12 @@ function beatBlock(b: BeatState, full: string) {
 export const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 export const btn = (action: string, label: string, cls = "ghost", extra = "") => `<button type="button" class="${cls}" data-action="${action}" ${extra}>${label}</button>`;
 const closeBtn = (label = u("close")) => btn("close", "×", "close", `aria-label="${esc(label)}"`);
+/** A toy icon rendered in Blender (public/ui, see art/ui/build_ui.py). Decorative: the button names it. */
+export const icon = (name: string, cls = "") => `<img class="ico3d${cls ? ` ${cls}` : ""}" src="ui/${name}.webp" alt="" aria-hidden="true" draggable="false" decoding="async">`;
+/** An icon button with a short caption (the dock on the title screen and in play). */
+const dockBtn = (action: string, ico: string, label: string, extra = "", badge = "") =>
+  `<button type="button" class="dock-btn" data-action="${action}" ${extra}>${icon(ico)}<span>${esc(label)}</span>${badge}</button>`;
+const STAT_ICON: Record<Stat, string> = { health: "health", joy: "joy", savings: "savings" };
 const signed = (v: number) => `${v > 0 ? "+" : ""}${v}`;
 
 export const statInfo: Record<Stat, { icon: string; readonly name: string }> = {
@@ -105,7 +111,7 @@ function portrait(who: string, l: Life, size = "") {
 // ---------------------------------------------------------------------------
 // title
 // ---------------------------------------------------------------------------
-export function titleUI(o: { saved: Life | null; identity: Identity; loading: boolean; loadError: string; legacy: boolean; invalid: boolean; storage: boolean; pace: string; graphics: string; sound: boolean; reduced: boolean; makeOpen: boolean; lang: Lang; album: number }) {
+export function titleUI(o: { saved: Life | null; loading: boolean; loadError: string; legacy: boolean; invalid: boolean; storage: boolean; sound: boolean; album: number }) {
   const load = o.loadError
     ? esc(o.loadError)
     : o.loading
@@ -115,41 +121,87 @@ export function titleUI(o: { saved: Life | null; identity: Identity; loading: bo
         : o.saved
           ? esc(u("title.saved", { n: o.saved.chapter + 1, title: chapters[o.saved.chapter].title }))
           : u("title.fresh");
+  const dis = o.loading ? "disabled" : "";
+  const start = o.saved
+    ? btn("continue", `${icon("play")}<span>${o.saved.complete ? u("title.readStory") : u("title.continue")}</span>`, "primary big wide", dis) +
+      btn("start", `${icon("newlife")}<span>${u("title.beginNew")}</span>`, "secondary wide", dis)
+    : btn("start", `${icon("play")}<span>${u("title.begin")}</span>`, "primary big wide", dis);
   return `<main class="title">
   <section class="title-card">
+   <img class="emblem" src="ui/emblem.webp" alt="" aria-hidden="true" width="280" height="280" draggable="false">
    <p class="kicker">${u("title.kicker")}</p>
    <h1><span>${u("title.game")}</span><em>${u("title.place")}</em></h1>
    <p class="tagline">${u("title.tagline")}</p>
-   <div class="start">${o.saved ? btn("continue", `${o.saved.complete ? u("title.readStory") : u("title.continue")} <span>→</span>`, "primary big", o.loading ? "disabled" : "") : ""}${btn("start", o.saved ? u("title.beginNew") : `${u("title.begin")} <span>→</span>`, o.saved ? "secondary" : "primary big", o.loading ? "disabled" : "")}</div>
+   <div class="start">${start}</div>
    <p class="load" role="status">${load}</p>
    ${o.loadError ? btn("retry", u("title.retry"), "secondary") : ""}
    ${o.legacy && !o.saved ? `<p class="note">${u("title.legacy")}</p>` : ""}
    ${o.invalid ? `<p class="note warn">${u("title.invalid")}</p>` : ""}
    ${o.storage ? `<p class="note warn">${u("title.storage")}</p>` : ""}
-   <details class="make"${o.makeOpen ? " open" : ""}><summary>${u("title.make")}</summary>
-    <label class="field">${u("title.name")}<input name="name" maxlength="24" value="${esc(o.identity.name === "You" ? "" : o.identity.name)}" placeholder="${esc(u("title.name"))}" autocomplete="off"></label>
-    <fieldset class="field"><legend>${u("title.hair")}</legend><div class="pick hair">${HAIR_STYLES.map((_, i) => `<button type="button" data-action="hair" data-value="${i}" aria-pressed="${o.identity.hair === i}">${u(`hair.${i}` as UIKey)}</button>`).join("")}</div></fieldset>
-    <fieldset class="field"><legend>${u("title.skin")}</legend><div class="pick swatches">${SKINS.map((c, i) => `<button type="button" data-action="skin" data-value="${i}" aria-pressed="${o.identity.skin === i}" aria-label="${esc(u("title.skinN", { n: i + 1 }))}" style="--c:#${c}"></button>`).join("")}</div></fieldset>
-    <fieldset class="field"><legend>${u("title.colour")}</legend><div class="pick swatches">${COLOURS.map((c, i) => `<button type="button" data-action="colour" data-value="${i}" aria-pressed="${o.identity.colour === i}" aria-label="${esc(u("title.colourN", { n: i + 1 }))}" style="--c:#${c}"></button>`).join("")}</div></fieldset>
-    <div class="row"><label class="field">${u("title.pace")}<select name="pace">${(["gentle", "normal", "brisk"] as const).map((n) => `<option value="${n}" ${o.pace === n ? "selected" : ""}>${u(`pace.${n}`)}</option>`).join("")}</select></label>
-    ${graphicsSelect(o.graphics)}${langSelect(o.lang)}</div>
-    <small class="help">${u("title.graphicsHelp")}</small>
-   </details>
   </section>
-  <footer class="title-foot"><span>${u("title.madeWith")}</span><div>${o.album ? btn("album", `✦ ${u("title.album")}`, "ghost small") : ""}${btn("sound", o.sound ? u("sound.on") : u("sound.off"), "ghost small")}${btn("motion", o.reduced ? u("motion.gentle") : u("motion.full"), "ghost small")}</div></footer>
+  <nav class="dock title-dock" aria-label="${esc(u("dock.settings"))}">
+   ${dockBtn("customise", "customise", u("title.make"), dis)}
+   ${o.album ? dockBtn("album", "album", u("dock.album")) : ""}
+   ${dockBtn("settings", "settings", u("dock.settings"))}
+   ${dockBtn("sound", "sound", u("dock.sound"), `aria-pressed="${o.sound}"${o.sound ? "" : ' class="dock-btn off"'}`)}
+  </nav>
  </main>`;
 }
-const graphicsSelect = (g: string) =>
-  `<label class="field">${u("gfx.label")}<select name="graphics"><option value="high" ${g === "high" ? "selected" : ""}>${u("gfx.high")}</option><option value="low" ${g === "low" ? "selected" : ""}>${u("gfx.low")}</option></select></label>`;
-const langSelect = (lang: Lang) =>
-  `<label class="field">${u("title.language")}<select name="lang">${LANGS.map((x) => `<option value="${x.code}" lang="${x.code}" ${x.code === lang ? "selected" : ""}>${x.name}</option>`).join("")}</select></label>`;
+
+/** Make it yours: a sheet over the lower screen while the camera frames your avatar above it. */
+export function customiseUI(identity: Identity) {
+  return `<section class="sheet customise" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+   <header>${icon("customise", "head-ico")}<h2 id="sheet-title" tabindex="-1">${u("title.make")}</h2>${closeBtn(u("title.done"))}</header>
+   <div class="sheet-body">
+    <label class="field">${u("title.name")}<input name="name" maxlength="24" value="${esc(identity.name === "You" ? "" : identity.name)}" placeholder="${esc(u("title.name"))}" autocomplete="off" enterkeyhint="done"></label>
+    <fieldset class="field"><legend>${u("title.hair")}</legend><div class="pick hair">${HAIR_STYLES.map((_, i) => `<button type="button" data-action="hair" data-value="${i}" aria-pressed="${identity.hair === i}">${u(`hair.${i}` as UIKey)}</button>`).join("")}</div></fieldset>
+    <fieldset class="field"><legend>${u("title.skin")}</legend><div class="pick swatches">${SKINS.map((c, i) => `<button type="button" data-action="skin" data-value="${i}" aria-pressed="${identity.skin === i}" aria-label="${esc(u("title.skinN", { n: i + 1 }))}" style="--c:#${c}"></button>`).join("")}</div></fieldset>
+    <fieldset class="field"><legend>${u("title.colour")}</legend><div class="pick swatches">${COLOURS.map((c, i) => `<button type="button" data-action="colour" data-value="${i}" aria-pressed="${identity.colour === i}" aria-label="${esc(u("title.colourN", { n: i + 1 }))}" style="--c:#${c}"></button>`).join("")}</div></fieldset>
+   </div>
+   <footer>${btn("close", u("title.done"), "primary big wide")}</footer>
+  </section>`;
+}
+
+export type SettingsState = { lang: Lang; graphics: string; pace: string; largeText: boolean; closeups: boolean; reduced: boolean; sound: boolean; music: boolean; version: string };
+/** Every setting in one place, grouped, with switches and segmented choices (title and pause). */
+export function settingsUI(o: SettingsState) {
+  let n = 0;
+  const seg = (key: string, value: string, options: [string, string][], label: string) => {
+    const id = `set-${++n}`;
+    return { id, control: `<div class="seg" role="radiogroup" aria-labelledby="${id}">${options.map(([v, text]) => `<button type="button" role="radio" aria-checked="${v === value}" data-action="set" data-key="${key}" data-value="${v}"${key === "lang" ? ` lang="${v}"` : ""}>${esc(text)}</button>`).join("")}</div>`, label };
+  };
+  const sw = (key: string, on: boolean, label: string, disabled = false) => {
+    const id = `set-${++n}`;
+    return { id, control: `<button type="button" class="switch" role="switch" aria-checked="${on}" aria-labelledby="${id}" data-action="toggle" data-key="${key}" ${disabled ? "disabled" : ""}><i></i></button>`, label };
+  };
+  const row = (ico: string, c: { id: string; control: string; label: string }, help = "", wide = false) =>
+    `<div class="set-row${wide ? " wide" : ""}">${icon(ico)}<div class="set-text"><span id="${c.id}">${esc(c.label)}</span>${help ? `<small>${esc(help)}</small>` : ""}</div>${c.control}</div>`;
+  return `<section class="sheet settings" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+   <header>${icon("settings", "head-ico")}<h2 id="sheet-title" tabindex="-1">${u("settings.title")}</h2>${closeBtn()}</header>
+   <div class="sheet-body">
+    <h3>${u("settings.game")}</h3>
+    ${row("language", seg("lang", o.lang, LANGS.map((x) => [x.code, x.name]), u("title.language")), "", true)}
+    ${row("pace", seg("pace", o.pace, (["gentle", "normal", "brisk"] as const).map((p) => [p, u(`pace.${p}`)]), u("title.pace")), "", true)}
+    <h3>${u("settings.display")}</h3>
+    ${row("graphics", seg("graphics", o.graphics, [["high", u("gfx.high")], ["low", u("gfx.low")]], u("gfx.label")), "", true)}
+    ${row("textsize", seg("text", o.largeText ? "large" : "standard", [["standard", u("settings.textStandard")], ["large", u("settings.textLarge")]], u("settings.textSize")), "", true)}
+    ${row("camera", sw("closeups", o.closeups, u("settings.closeups")), u("settings.closeupsHelp"))}
+    ${row("motion", sw("reduced", o.reduced, u("settings.motion")), u("settings.motionHelp"))}
+    <h3>${u("settings.audio")}</h3>
+    ${row("sound", sw("sound", o.sound, u("settings.soundLabel")))}
+    ${row("music", sw("music", o.music && o.sound, u("settings.music"), !o.sound), u("settings.musicHelp"))}
+    <p class="help">${u("settings.reloadNote")}</p>
+    <p class="about">${esc(u("settings.about", { v: o.version }))}</p>
+   </div>
+  </section>`;
+}
 
 // ---------------------------------------------------------------------------
 // the HUD
 // ---------------------------------------------------------------------------
 export function statsUI(l: Life) {
   return `<div class="stats" aria-label="${esc(u("hud.yourLife"))}">${STATS.map(
-    (s) => `<div class="stat ${s}"><b aria-hidden="true">${statInfo[s].icon}</b><span><small>${esc(statInfo[s].name)}</small><strong>${l.stats[s]}</strong></span><i style="--v:${l.stats[s]}%"></i></div>`,
+    (s) => `<div class="stat ${s}">${icon(STAT_ICON[s], "stat-ico")}<span><small>${esc(statInfo[s].name)}</small><strong>${l.stats[s]}</strong></span><i style="--v:${l.stats[s]}%"></i></div>`,
   ).join("")}</div>`;
 }
 
@@ -166,30 +218,27 @@ export function seasonChip(chapter: number) {
   return `<span class="season s-${s}"><b aria-hidden="true">${SEASON_ICON[s]}</b>${u(`season.${s}`)}</span>`;
 }
 
-export function playUI(l: Life, o: { hunt: string; notice: string; saveStatus: string }) {
+export function playUI(l: Life, o: { hunt: string; notice: string; saveStatus: string; sound: boolean }) {
   const ch = chapterOf(l);
   const free =
     ch.free > 50
       ? `<span class="all-time">${u("hud.allTime")}</span>`
       : `<span class="suns" aria-label="${esc(u("hud.freeLeft", { left: freeTime(l), total: ch.free }))}">${Array.from({ length: ch.free }, (_, i) => `<i class="${i < freeTime(l) ? "on" : ""}">☀</i>`).join("")}</span>`;
   return `<header class="hud-top">
-   <div class="chapter-chip"><span class="kicker">${esc(u("hud.chapterAge", { n: l.chapter + 1, age: ch.age }))} ${seasonChip(l.chapter)}</span><h1>${esc(ch.title)}</h1><span class="place">${esc(ch.place)}</span></div>
+   <div class="chapter-chip"><span class="ch-num" aria-hidden="true">${l.chapter + 1}</span><div><span class="kicker">${esc(u("hud.chapterAge", { n: l.chapter + 1, age: ch.age }))} ${seasonChip(l.chapter)}</span><h1>${esc(ch.title)}</h1><span class="place">${esc(ch.place)}</span></div></div>
    ${statsUI(l)}
   </header>
   <ol class="lifeline" aria-label="${esc(u("hud.chapters"))}">${chapters.map((c, i) => `<li class="${i < l.chapter ? "past" : i === l.chapter ? "now" : ""}" title="${esc(c.title)}"></li>`).join("")}</ol>
   <aside class="quest"><span class="quest-mark" aria-hidden="true">!</span><div><strong>${esc(text(ch.objective, l))}</strong><small>${esc(objectiveLine(l))}</small></div><div class="free"><small>${u("hud.free")}</small>${free}</div></aside>
   ${o.hunt}
   <div id="toast" class="toast" role="status">${o.notice}</div>
-  <div class="controls"><div class="dpad" aria-label="Movement">${["0,-1:up:↑", "-1,0:left:←", "1,0:right:→", "0,1:down:↓"]
-    .map((d) => {
-      const [v, c, s] = d.split(":");
-      return `<button data-pad="${v}" class="${c}" aria-label="${esc(u("hud.moveHelp", { dir: s }))}">${s}</button>`;
-    })
-    .join("")}</div>
-   <button class="action" data-action="interact" id="interact" disabled><kbd>E</kbd><span id="interact-label">${u("hud.lookAround")}</span></button></div>
-  <footer class="hud-bottom"><div>${btn("explore", u("hud.goto"), "pill")}${btn("journal", `${u("hud.journal")} <b class="count">${l.memories.length}</b>`, "pill")}${btn("briefing", u("hud.chapter"), "pill")}</div>
+  <div class="controls"><div class="stick" data-stick aria-hidden="true"><i></i></div>
+   <button class="action" data-action="interact" id="interact" disabled>${icon("people", "act-ico")}<kbd>E</kbd><span id="interact-label">${u("hud.lookAround")}</span></button></div>
+  <footer class="hud-bottom">
+   <nav class="dock">${dockBtn("explore", "goto", u("dock.goto"))}${dockBtn("journal", "journal", u("dock.journal"), "", `<b class="count">${l.memories.length}</b>`)}${dockBtn("kite-open", "kite", u("tab.kite"), `title="${esc(u("kite.title"))}"`)}${dockBtn("briefing", "chapter", u("dock.chapter"), 'data-wide-only=""')}</nav>
    <span id="save-status" class="save">${o.saveStatus}</span>
-   <div>${btn("sound", "♪", "round", `aria-label="${esc(u("hud.sound"))}"`)}${btn("pause", "Ⅱ", "round", `aria-label="${esc(u("hud.pause"))}"`)}</div></footer>`;
+   <nav class="dock">${dockBtn("sound", "sound", u("dock.sound"), `aria-pressed="${o.sound}"${o.sound ? "" : ' class="dock-btn off"'}`)}${dockBtn("pause", "pause", u("hud.pause"))}</nav>
+  </footer>`;
 }
 
 export function huntUI(l: Life) {
@@ -234,7 +283,7 @@ export function momentUI(l: Life, m: Moment, b: BeatState) {
   const last = b.index >= b.list.length - 1;
   const opts = visibleOptions(l, m);
   return `<section class="dialog talk${last ? " choosing" : ""}" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
-   <header>${portrait(who, l)}<div><span class="kicker ${m.kind}">${m.kind === "main" ? u("dlg.main") : u("dlg.side")}</span><h2 id="dlg-title" tabindex="-1">${esc(text(m.title, l))}</h2><p class="who">${esc(personName(who, l))}${role ? ` · ${esc(role)}` : ""}</p></div>${dots(b)}${closeBtn(u("dlg.notNow"))}</header>
+   <header>${portrait(who, l)}<div><span class="kicker ${m.kind}">${m.kind === "main" ? u("dlg.main") : chapterOf(l).free > 50 ? `… ${u("hud.free")}` : u("dlg.side")}</span><h2 id="dlg-title" tabindex="-1">${esc(text(m.title, l))}</h2><p class="who">${esc(personName(who, l))}${role ? ` · ${esc(role)}` : ""}</p></div>${dots(b)}${closeBtn(u("dlg.notNow"))}</header>
    <div class="dialog-body">${beatBlock(b, [text(m.prompt, l), ctx ?? ""].join(" "))}
    ${
      last
@@ -266,7 +315,7 @@ export function activityUI(l: Life, kite: { active: boolean; assist: boolean }) 
   const a = chapterOf(l).activity;
   const r = record(l);
   const title = text(a.title, l);
-  const head = `<header>${portrait(a.who ?? "you", l)}<div><span class="kicker side">${u("actv.kicker")}</span><h2 id="dlg-title" tabindex="-1">${esc(title)}</h2><p class="who">${esc(u("actv.keepsake", { name: a.keepsake }))}</p></div>${closeBtn()}</header>`;
+  const head = `<header>${portrait(a.who ?? "you", l)}<div><span class="kicker side">${chapterOf(l).free > 50 ? `✦ ${u("explore.activityFree")}` : u("actv.kicker")}</span><h2 id="dlg-title" tabindex="-1">${esc(title)}</h2><p class="who">${esc(u("actv.keepsake", { name: a.keepsake }))}</p></div>${closeBtn()}</header>`;
   if (!r.started) {
     const can = freeTime(l) > 0;
     const unlimited = chapterOf(l).free > 50;
@@ -291,26 +340,30 @@ export function activityUI(l: Life, kite: { active: boolean; assist: boolean }) 
   return `<section class="dialog activity" role="dialog" aria-modal="true" aria-labelledby="dlg-title">${head}<div class="dialog-body"><p class="prompt">${esc(text(a.intro, l))}</p><div class="actions">${btn("close", u("actv.keepLooking"), "primary")}</div></div></section>`;
 }
 
-export function exploreUI(places: { id: string; kind: string; label: string; status?: string }[]) {
-  const icon = (p: { kind: string; status?: string }) => (p.kind === "person" ? (p.status === "main" ? "!" : p.status === "side" ? "…" : p.status === "guest" ? "?" : "•") : p.kind === "activity" ? "✦" : p.kind === "exit" ? "→" : p.kind === "hunt" ? "★" : "○");
+export function exploreUI(places: { id: string; kind: string; label: string; status?: string }[], unlimited = false) {
+  const glyph = (p: { kind: string; status?: string }) => (p.kind === "person" ? (p.status === "main" ? "!" : p.status === "side" ? "…" : p.status === "guest" ? "?" : "•") : p.kind === "activity" ? "✦" : p.kind === "exit" ? "→" : p.kind === "hunt" ? "★" : "○");
   const sub = (p: { kind: string; status?: string }) =>
     p.kind === "person"
       ? p.status === "main"
         ? u("explore.main")
         : p.status === "side"
-          ? u("explore.side")
+          ? unlimited
+            ? u("hud.free")
+            : u("explore.side")
           : p.status === "guest"
             ? u("explore.meet")
             : u("explore.hello")
       : p.kind === "activity"
-        ? u("explore.activity")
+        ? unlimited
+          ? u("explore.activityFree")
+          : u("explore.activity")
         : p.kind === "exit"
           ? u("explore.exit")
           : p.kind === "hunt"
             ? u("explore.hunt")
             : u("explore.find");
-  return `<div class="shade"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="m-title"><header><h2 id="m-title" tabindex="-1">${u("explore.title")}</h2>${closeBtn()}</header>
-   <div class="places">${places.map((p) => `<button data-action="travel" data-place="${p.id}" class="place-row is-${p.status ?? p.kind}"><span class="ico">${icon(p)}</span><span><strong>${esc(p.label)}</strong><small>${sub(p)}</small></span><b>→</b></button>`).join("") || `<p>${u("explore.nothing")}</p>`}</div></section></div>`;
+  return `<div class="shade"><section class="modal explore" role="dialog" aria-modal="true" aria-labelledby="m-title"><header>${icon("goto", "head-ico")}<h2 id="m-title" tabindex="-1">${u("explore.title")}</h2>${closeBtn()}</header>
+   <div class="places">${places.map((p) => `<button data-action="travel" data-place="${p.id}" class="place-row is-${p.status ?? p.kind}"><span class="ico">${glyph(p)}</span><span><strong>${esc(p.label)}</strong><small>${sub(p)}</small></span><b>→</b></button>`).join("") || `<p>${u("explore.nothing")}</p>`}</div></section></div>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -318,17 +371,19 @@ export function exploreUI(places: { id: string; kind: string; label: string; sta
 // ---------------------------------------------------------------------------
 export const JOURNAL_TABS = ["people", "kite", "keepsakes", "paths", "story"] as const;
 
-function kiteTab(l: Life) {
+function kiteTab(l: Life, hint: string) {
   const look = kiteLook(l);
   const main = look.main;
+  const locked = hint && hint !== "plain" && (PATTERNS as readonly string[]).includes(hint) && !unlocked(l, hint as (typeof PATTERNS)[number]);
   return `<div class="workshop">
-   <figure class="kite-preview"><img src="${kiteImage(look.pattern, main, look.trim, 240)}" alt="" width="240" height="240"><figcaption>${esc(u("end.kite", { colour: kiteName(l) }))} · ${u(`kite.pattern.${look.pattern}`)}</figcaption></figure>
+   <figure class="kite-preview"><img src="${kiteImage(look.pattern, main, look.trim, 256)}" alt="" width="240" height="240"><figcaption>${esc(u("end.kite", { colour: kiteName(l) }))} · ${u(`kite.pattern.${look.pattern}`)}</figcaption></figure>
    <div class="workshop-tools"><p class="help">${u("kite.help")}</p>
     <fieldset class="field"><legend>${u("kite.pattern")}</legend><div class="patterns">${PATTERNS.map((p) => {
       const open = unlocked(l, p);
-      const how = p === "plain" ? "" : u(`kite.how.${p}` as UIKey);
-      return `<button type="button" data-action="kite-pattern" data-value="${p}" aria-pressed="${look.pattern === p}" ${open ? "" : `disabled aria-disabled="true" title="${esc(u("kite.earn", { how }))}"`}><img src="${kiteImage(p, open ? main : "#9aa3b5", open ? look.trim : "#dfe3ea", 72)}" alt="" width="48" height="48"><span>${u(`kite.pattern.${p}`)}</span>${open ? "" : `<small>🔒 ${esc(u("kite.earn", { how }))}</small>`}</button>`;
+      const on = look.pattern === p;
+      return `<button type="button" class="pattern${open ? "" : " locked"}${hint === p && !open ? " asked" : ""}" data-action="kite-pattern" data-value="${p}" aria-pressed="${on}"${open ? "" : ` aria-label="${esc(`${u(`kite.pattern.${p}`)} · ${u("paths.locked")}`)}"`}><img src="${kiteImage(p, open ? main : "#9aa3b5", open ? look.trim : "#dfe3ea", 96)}" alt="" width="56" height="56"><span>${u(`kite.pattern.${p}`)}</span>${on ? `<em class="badge">${u("kite.equipped")}</em>` : ""}${open ? "" : '<i class="lock" aria-hidden="true">🔒</i>'}</button>`;
     }).join("")}</div></fieldset>
+    <p class="kite-hint${locked ? " on" : ""}" role="status">${locked ? `🔒 ${esc(u("kite.earn", { how: u(`kite.how.${hint}` as UIKey) }))}` : esc(u("kite.tapLocked"))}</p>
     <fieldset class="field"><legend>${u("kite.trim")}</legend><div class="pick swatches">${TRIMS.map((c, i) => `<button type="button" data-action="kite-trim" data-value="${i}" aria-pressed="${l.style.trim === i}" aria-label="${esc(u("title.colourN", { n: i + 1 }))}" style="--c:#${c}"></button>`).join("")}</div></fieldset>
    </div></div>`;
 }
@@ -349,7 +404,8 @@ function pathsTab(l: Life, album: Album) {
      .join("")}</ol>`;
 }
 
-export function journalUI(l: Life, tab: string, album: Album) {
+const TAB_ICON: Record<string, string> = { people: "people", kite: "kite", keepsakes: "keepsakes", paths: "paths", story: "story" };
+export function journalUI(l: Life, tab: string, album: Album, kiteHint = "") {
   const tabs: [string, UIKey][] = JOURNAL_TABS.map((t) => [t, `tab.${t}` as UIKey]);
   let body = "";
   if (tab === "people") {
@@ -362,7 +418,7 @@ export function journalUI(l: Life, tab: string, album: Album) {
       .join("")}</div>
      <h3>${u("people.you")}</h3>${statsUI(l)}<p class="help">${l.facts.road ? `${esc(career(l))}. ` : ""}${u("people.help")}</p>`;
   } else if (tab === "kite") {
-    body = kiteTab(l);
+    body = kiteTab(l, kiteHint);
   } else if (tab === "keepsakes") {
     const ks = keepsakes(l);
     body = ks.length ? `<div class="keepsakes">${ks.map((k) => `<article><span class="ks-icon ${k.icon}" aria-hidden="true"></span><small>${u("keepsakes.chapter", { n: k.chapter + 1 })}</small><strong>${esc(k.title)}</strong><p>${esc(k.text)}</p></article>`).join("")}</div>` : `<p>${u("keepsakes.empty")}</p>`;
@@ -377,18 +433,18 @@ export function journalUI(l: Life, tab: string, album: Album) {
         .map(([c, ms]) => `<section class="mem-chapter"><h4>${c + 1} · ${esc(chapters[c].title)}</h4>${ms.map((m) => `<details class="memory"><summary><strong>${esc(m.title)}</strong> ${esc(m.text)}</summary><p>${esc(m.detail)}</p></details>`).join("")}</section>`)
         .join("") || `<p>${u("story.empty")}</p>`;
   }
-  return `<div class="shade"><section class="modal journal" role="dialog" aria-modal="true" aria-labelledby="m-title"><header><h2 id="m-title" tabindex="-1">${u("journal.title")}</h2>${closeBtn()}</header>
-   <div class="tabs" role="tablist">${tabs.map(([id, key]) => `<button role="tab" data-action="tab" data-tab="${id}" aria-selected="${tab === id}">${u(key)}</button>`).join("")}</div>
+  return `<div class="shade"><section class="modal journal" role="dialog" aria-modal="true" aria-labelledby="m-title"><header>${icon("journal", "head-ico")}<h2 id="m-title" tabindex="-1">${u("journal.title")}</h2>${closeBtn()}</header>
+   <div class="tabs" role="tablist">${tabs.map(([id, key]) => `<button role="tab" data-action="tab" data-tab="${id}" aria-selected="${tab === id}">${icon(TAB_ICON[id], "tab-ico")}<span>${u(key)}</span></button>`).join("")}</div>
    <div class="tab-body tab-${esc(tab)}">${body}</div></section></div>`;
 }
 
-export function pauseUI(o: { storage: boolean; graphics: string; largeText: boolean; reduced: boolean; sound: boolean; music: boolean; closeups: boolean; lang: Lang }) {
-  return `<div class="shade"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="m-title"><header><h2 id="m-title" tabindex="-1">${u("pause.title")}</h2>${closeBtn(u("pause.resume"))}</header>
-   <p>${o.storage ? u("pause.noSave") : u("pause.saved")}</p>
-   <div class="menu">${btn("close", u("pause.resume"), "primary")}
-    <div class="row">${graphicsSelect(o.graphics)}${langSelect(o.lang)}</div>
-    ${btn("briefing", u("pause.readCard"), "secondary")}${btn("text-size", o.largeText ? u("pause.textLarge") : u("pause.textStandard"), "secondary")}${btn("closeups", o.closeups ? u("pause.closeupsOn") : u("pause.closeupsOff"), "secondary")}${btn("motion", o.reduced ? u("pause.motionOn") : u("pause.motionOff"), "secondary")}${btn("sound", o.sound ? u("pause.soundOn") : u("pause.soundOff"), "secondary")}${btn("music", o.music ? u("pause.musicOn") : u("pause.musicOff"), "secondary", o.sound ? "" : "disabled")}${btn("title", u("pause.title2"), "ghost")}</div>
-   <p class="help">${u("pause.help")}</p></section></div>`;
+const tile = (action: string, ico: string, label: string) => `<button type="button" class="tile" data-action="${action}">${icon(ico)}<span>${esc(label)}</span></button>`;
+export function pauseUI(o: { storage: boolean; touch: boolean }) {
+  return `<div class="shade"><section class="modal pause" role="dialog" aria-modal="true" aria-labelledby="m-title"><header>${icon("pause", "head-ico")}<h2 id="m-title" tabindex="-1">${u("pause.title")}</h2>${closeBtn(u("pause.resume"))}</header>
+   <p class="status${o.storage ? " warn" : ""}">${o.storage ? u("pause.noSave") : u("pause.saved")}</p>
+   ${btn("close", `${icon("play")}<span>${u("pause.resume")}</span>`, "primary big wide")}
+   <div class="tiles">${tile("settings", "settings", u("dock.settings"))}${tile("journal", "journal", u("dock.journal"))}${tile("briefing", "chapter", u("pause.readCard"))}${tile("title", "home", u("pause.title2"))}</div>
+   ${o.touch ? "" : `<details class="keys"><summary>${u("pause.keys")}</summary><p class="help">${u("pause.help")}</p></details>`}</section></div>`;
 }
 
 export function restartUI() {
@@ -416,8 +472,8 @@ export function endingUI(l: Life, o: { canShare: boolean; album: boolean }) {
      .map((k) => `<article><span class="ks-icon ${k.icon}" aria-hidden="true"></span><strong>${esc(k.title)}</strong></article>`)
      .join("")}</div></section>
    <p class="closing">${u("end.closing")}</p>
-   <div class="actions share">${btn("card-save", `⤓ ${u("end.picture")}`, "secondary")}${o.canShare ? btn("card-share", `↗ ${u("end.share")}`, "secondary") : ""}${o.album ? btn("album", `✦ ${u("end.album")}`, "secondary") : ""}</div>
-   <div class="actions">${btn("journal", u("end.journal"), "secondary")}${btn("start", u("end.again"), "primary big")}${btn("title", u("end.title"), "ghost")}</div>
+   <div class="actions share">${btn("card-save", `${icon("camera")}<span>${u("end.picture")}</span>`, "secondary")}${o.canShare ? btn("card-share", `${icon("goto")}<span>${u("end.share")}</span>`, "secondary") : ""}${o.album ? btn("album", `${icon("album")}<span>${u("end.album")}</span>`, "secondary") : ""}</div>
+   <div class="actions">${btn("journal", `${icon("journal")}<span>${u("end.journal")}</span>`, "secondary")}${btn("start", `${icon("newlife")}<span>${u("end.again")}</span>`, "primary big")}${btn("title", `${icon("home")}<span>${u("end.title")}</span>`, "secondary")}</div>
   </main>`;
 }
 
@@ -426,7 +482,7 @@ export function albumUI(a: Album) {
   const found = endingsFound(a);
   const lives = [...a.lives].reverse();
   const present = (ids: string[]) => (ids.length ? u("album.present", { names: ids.map((w) => people[w]?.name ?? w).join(", ") }) : u("album.nobody"));
-  return `<div class="shade"><section class="modal album" role="dialog" aria-modal="true" aria-labelledby="m-title"><header><h2 id="m-title" tabindex="-1">${u("album.title")}</h2>${closeBtn()}</header>
+  return `<div class="shade"><section class="modal album" role="dialog" aria-modal="true" aria-labelledby="m-title"><header>${icon("trophy", "head-ico")}<h2 id="m-title" tabindex="-1">${u("album.title")}</h2>${closeBtn()}</header>
    <p class="explored">${esc(u("album.found", { n: found.size, total: ENDINGS.length }))}</p>
    <div class="endings">${ENDINGS.map((k) => {
      const got = found.has(k);
