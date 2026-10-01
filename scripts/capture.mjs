@@ -1,5 +1,5 @@
 // Visual review captures: the title, then every chapter opened from a real saved life.
-// GAME_URL (default http://127.0.0.1:4196/) · GPU=1 uses the hardware GPU through ANGLE.
+// GAME_URL (default http://127.0.0.1:4263/) · GPU=1 uses the hardware GPU through ANGLE.
 // Writes docs/captures/kitehaven-*.png (git-ignored review artefacts).
 import { chromium } from "@playwright/test";
 import { tsImport } from "tsx/esm/api";
@@ -7,7 +7,7 @@ import { mkdir } from "node:fs/promises";
 
 const core = await tsImport("../src/core.ts", import.meta.url);
 const content = await tsImport("../src/content.ts", import.meta.url);
-const base = process.env.GAME_URL || "http://127.0.0.1:4196/";
+const base = process.env.GAME_URL || "http://127.0.0.1:4263/";
 const only = process.env.ONLY ? process.env.ONLY.split(",").map(Number) : null;
 const args = process.env.GPU ? ["--use-angle=d3d11", "--ignore-gpu-blocklist", "--enable-gpu-rasterization"] : [];
 const browser = await chromium.launch({ headless: true, args });

@@ -694,38 +694,52 @@ body:not(.touch) .action .act-ico {
 
 /* ---------- conversation ---------- */
 .dots {
-  gap: 0;
+  gap: 6px;
+  align-items: center;
 }
-.dots button {
-  position: relative;
-  width: 28px;
-  height: 28px;
-  background: transparent !important;
-  box-shadow: none !important;
-}
-.dots button::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 11px;
-  height: 11px;
-  margin: -5.5px 0 0 -5.5px;
+.dots i {
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  background: rgba(29, 35, 64, 0.18);
+  background: rgba(29, 35, 64, 0.2);
 }
-.dots button.past::before {
-  background: rgba(29, 35, 64, 0.45);
+.dots i.past {
+  background: rgba(29, 35, 64, 0.5);
 }
-.dots button.on::before {
+.dots i.on {
+  width: 22px;
+  border-radius: 999px;
   background: var(--sun);
   box-shadow: 0 0 0 2px var(--ink);
 }
-.cine-text .dots button::before {
-  background: rgba(255, 255, 255, 0.3);
+.cine-text .dots i {
+  background: rgba(255, 255, 255, 0.35);
 }
-.cine-text .dots button.past::before {
-  background: rgba(255, 255, 255, 0.6);
+.cine-text .dots i.past {
+  background: rgba(255, 255, 255, 0.7);
+}
+.back {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--tap);
+  height: var(--tap);
+  margin-left: 4px;
+  border: var(--edge);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 3px 0 var(--ink);
+  color: var(--ink);
+  font-size: 1.6em;
+  font-weight: 700;
+  line-height: 1;
+}
+.back:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--ink);
+}
+.cine-text .back {
+  margin: 8px 0 0;
 }
 .beat .more {
   width: 34px;
@@ -1225,15 +1239,7 @@ body:not(.touch) .action .act-ico {
     font-size: 12px;
   }
 }
-.dots button {
-  width: 32px;
-  height: 32px;
-}
 @media (max-width: 760px) {
-  .dialog header .dots button {
-    width: 26px;
-    height: 32px;
-  }
   .dialog header {
     gap: 10px;
   }
@@ -1301,4 +1307,104 @@ body[data-panel="customise"] .title-dock * {
   .title-dock .dock-btn span {
     text-align: left;
   }
+}
+
+/* ---------- contrast (WCAG AA): every label is at least 4.5:1, large text 3:1 ---------- */
+.primary,
+.secondary,
+.pill,
+.round,
+.dock-btn,
+.tile,
+.option,
+.block,
+.place-row,
+.tabs button,
+.seg button,
+.back {
+  color: var(--ink);
+}
+.tabs button[aria-selected="true"] {
+  color: #fff;
+}
+.chip.health,
+.pop.health {
+  background: #d63131;
+}
+.chip.savings,
+.pop.savings {
+  background: #0f8075;
+}
+.chip.bond,
+.pop.bond,
+.dock-btn .count,
+.pill .count {
+  background: #d6336c;
+}
+.kicker.main {
+  color: #8a5c00;
+}
+.title h1 span {
+  color: #e8452a;
+}
+.pattern .badge {
+  background: var(--mint);
+  color: var(--ink);
+}
+
+/* free-time suns are the toy sun; spent hours fade out */
+.suns {
+  display: inline-flex;
+  gap: 2px;
+}
+.suns i {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+}
+.suns i .ico3d {
+  width: 24px;
+  height: 24px;
+}
+.suns i:not(.on) .ico3d {
+  filter: grayscale(1) opacity(0.35);
+}
+
+/* keepsakes wear their toy icon on a coloured tile */
+.ks-icon {
+  display: grid;
+  place-items: center;
+}
+.ks-icon .ico3d {
+  width: 40px;
+  height: 40px;
+}
+
+/* Phones: the dialog title keeps the width; progress dots and "previous part" sit on a row below. */
+@media (max-width: 760px) {
+  .dialog header {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+  .dialog header > div {
+    flex: 1 1 55%;
+    min-width: 0;
+  }
+  .dialog header .close {
+    order: 1;
+  }
+  .dialog header .dots {
+    order: 2;
+    margin: 0 0 0 auto;
+  }
+  .dialog header .back {
+    order: 3;
+    width: 44px;
+    height: 44px;
+    font-size: 1.4em;
+  }
+}
+/* room for the "Flying now" badge above the first row (Safari clips it otherwise) */
+.patterns {
+  padding-top: 12px;
 }

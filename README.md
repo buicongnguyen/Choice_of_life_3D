@@ -53,21 +53,24 @@ Node.js 22 or newer.
 ```sh
 npm ci
 npm run dev          # http://127.0.0.1:5173
-npm test             # rules, saves, balance, endings, content, beats and navigation (25 tests)
+npm test             # rules, saves, endings, content, beats, navigation, features, vi/ko packs (41 tests)
 npm run build        # type-check, bundle, write dist/release.json
 npm run preview
 ```
 
-Browser checks (Playwright; `GPU=1` uses the hardware GPU through ANGLE):
+Browser checks (Playwright; `GPU=1` uses the hardware GPU through ANGLE; `BROWSER=webkit`
+runs Safari's engine for iPhone/iPad behaviour). The scripts default to port 4263:
 
 ```sh
-npx vite --host 127.0.0.1 --port 4196    # or: npm run build && npx vite preview --port 4197
-GAME_URL=http://127.0.0.1:4196/ GPU=1 node scripts/smoke.mjs     # 13 end-to-end UI checks
-GAME_URL=http://127.0.0.1:4196/ GPU=1 node scripts/capture.mjs   # screenshots of all 12 chapters
-GAME_URL=http://127.0.0.1:4197/ GPU=1 node scripts/perf.mjs      # frame times, draw calls
-npx tsx scripts/balance.mts                                       # 400 random lives: stats and endings
-npx tsx scripts/textstats.mts                                     # how much text each screen shows
-GAME_URL=http://127.0.0.1:4197/ node scripts/audit-ui.mjs        # message sizes at PC resolutions
+npm run build && npx vite preview --host 127.0.0.1 --port 4263 --strictPort
+GPU=1 node scripts/smoke.mjs                  # 19 end-to-end checks (also BROWSER=webkit)
+GPU=1 node scripts/audit-mobile.mjs           # every screen at phone/tablet/PC sizes: tap targets,
+                                              # text under 12 px, WCAG contrast, overflow (LANGS=vi,ko)
+GPU=1 node scripts/capture.mjs                # screenshots of all 12 chapters
+GPU=1 node scripts/perf.mjs                   # frame times, draw calls
+npx tsx scripts/balance.mts                   # 400 random lives: stats and endings
+npx tsx scripts/textstats.mts                 # how much text each screen shows
+node scripts/audit-ui.mjs                     # message sizes at PC resolutions
 ```
 
 Screenshots go to `docs/captures/`, which is git-ignored.

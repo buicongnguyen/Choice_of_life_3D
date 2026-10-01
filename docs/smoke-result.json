@@ -1,6 +1,6 @@
 {
-  "at": "2026-09-30T13:46:30.848Z",
-  "base": "http://127.0.0.1:4197/",
+  "at": "2026-10-01T05:26:53.705Z",
+  "base": "http://127.0.0.1:4263/",
   "checks": [
     "title: settings switches, and the customise sheet",
     "title → customise → begin a new life → chapter card",

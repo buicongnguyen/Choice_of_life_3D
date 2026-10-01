@@ -3,7 +3,7 @@ import { chromium } from "@playwright/test";
 import { tsImport } from "tsx/esm/api";
 import { mkdir } from "node:fs/promises";
 const core = await tsImport("../src/core.ts", import.meta.url);
-const base = process.env.GAME_URL || "http://127.0.0.1:4197/";
+const base = process.env.GAME_URL || "http://127.0.0.1:4263/";
 const out = process.env.OUT || "docs/captures/audit";
 await mkdir(out, { recursive: true });
 const browser = await chromium.launch({ headless: true, args: ["--use-angle=d3d11"] });

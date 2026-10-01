@@ -647,6 +647,63 @@ def icon_trophy():
     puff(star_pts(0.22, 0.1), "white", depth=0.03, bevel=0.03, at=(0, 0, 0.32), y=-0.62, m=mat("white", emit=0.6))
 
 
+def icon_flower():
+    for i in range(5):
+        a = math.pi / 2 + 2 * math.pi * i / 5
+        puff(circle(0.34, 48, 0.46 * math.cos(a), 0.3 + 0.46 * math.sin(a)), "rose", depth=0.14, bevel=0.08)
+    prim("sphere", "sun", (0, -0.2, 0.3), (0.3, 0.16, 0.3))
+    tube([(0.0, -0.15), (0.06, -0.55), (0.0, -1.0)], 0.06, "leaf")
+    puff([(0.04, -0.6), (0.4, -0.4), (0.62, -0.5), (0.36, -0.72)], "grass", depth=0.06, bevel=0.05)
+
+
+def icon_lantern():
+    puff(rounded_rect(0.9, 1.1, 0.18, 0, -0.1), "lemon", depth=0.4, bevel=0.1, m=mat("lemon", 0.3, emit=1.6))
+    for dx in (-0.46, 0.46):
+        prim("cube", "navy", (dx, -0.3, -0.1), (0.07, 0.07, 0.58), bevel=0.03)
+    prim("sphere", "orange", (0, -0.42, -0.15), (0.16, 0.1, 0.24), m=mat("orange", 0.3, emit=3.0), outline=False)
+    puff([(-0.62, 0.45), (0.62, 0.45), (0.36, 0.78), (-0.36, 0.78)], "navy", depth=0.5, bevel=0.06)
+    puff(rounded_rect(1.3, 0.2, 0.08, 0, -0.74), "navy", depth=0.5, bevel=0.06)
+    arc_tube(0.32, 0.15, math.pi - 0.15, 0.05, "navy", at=(0, 0, 0.8))
+
+
+def icon_star():
+    puff(star_pts(1.0, 0.48), "sun", depth=0.26, bevel=0.12)
+    eyes_smile(0, -0.02, -0.4, 1.15)
+
+
+def icon_ticket():
+    puff(rounded_rect(1.9, 1.05, 0.16), "coral", depth=0.12, bevel=0.05, rot=math.radians(-12))
+    puff(rounded_rect(1.5, 0.66, 0.1), "cream", depth=0.04, bevel=0.03, y=-0.12, rot=math.radians(-12), outline=False)
+    puff(star_pts(0.22, 0.1, 5, 0.38, 0.04), "sun", depth=0.04, bevel=0.02, y=-0.18, rot=math.radians(-12))
+    for i in range(4):
+        prim("cube", "ink", (-0.55 + i * 0.16, -0.18, 0.13 - i * 0.034), (0.05, 0.01, 0.018), (0, math.radians(-12), 0), bevel=0, outline=False, m=mat("ink", 0.5))
+
+
+def icon_toyboat():
+    puff([(-1.0, -0.2), (1.0, -0.2), (0.7, -0.62), (-0.7, -0.62)], "red", depth=0.42, bevel=0.08)
+    puff(rounded_rect(1.6, 0.12, 0.05, 0, -0.28), "white", depth=0.44, bevel=0.03, outline=False)
+    tube([(0.0, -0.22), (0.0, 0.95)], 0.045, "wood_dark")
+    puff([(0.08, 0.9), (0.08, -0.05), (0.8, -0.05)], "white", depth=0.06, bevel=0.04)
+    puff([(-0.08, 0.7), (-0.08, 0.02), (-0.6, 0.02)], "sun", depth=0.06, bevel=0.04)
+    puff([(-1.15, -0.72), (-0.6, -0.6), (0.0, -0.72), (0.6, -0.6), (1.15, -0.72), (1.15, -0.95), (-1.15, -0.95)], "sea", depth=0.2, bevel=0.06, y=-0.25)
+
+
+def icon_medal():
+    puff([(-0.5, 0.95), (-0.2, 0.95), (0.12, 0.15), (-0.18, 0.15)], "blue", depth=0.06, bevel=0.04)
+    puff([(0.5, 0.95), (0.2, 0.95), (-0.12, 0.15), (0.18, 0.15)], "red", depth=0.06, bevel=0.04)
+    prim("cyl", "gold", (0, -0.1, -0.35), (0.6, 0.6, 0.14), (math.pi / 2, 0, 0), bevel=0.05, m=mat("gold", 0.28, 0.75, coat=0.4))
+    puff(star_pts(0.32, 0.14, 5, 0, -0.35), "orange", depth=0.04, bevel=0.03, y=-0.26, m=mat("sun", 0.3, 0.6))
+
+
+def icon_key():
+    m = mat("gold", 0.28, 0.75, coat=0.4)
+    puff(circle(0.42, 64, -0.55, 0.0), "gold", depth=0.14, bevel=0.06, holes=[circle(0.18, 48, -0.55, 0.0)[::-1]], m=m, rot=math.radians(28))
+    puff(rounded_rect(1.0, 0.18, 0.06, 0.35, 0.0), "gold", depth=0.14, bevel=0.05, m=m, rot=math.radians(28))
+    for x in (0.55, 0.78):
+        puff(rounded_rect(0.13, 0.32, 0.04, x, -0.2), "gold", depth=0.14, bevel=0.04, m=m, rot=math.radians(28))
+    prim("sphere", "rose", (-0.52, -0.12, -0.28), (0.1, 0.06, 0.1), outline=False)
+
+
 ICONS = {
     "health": icon_health, "joy": icon_joy, "savings": icon_savings, "journal": icon_journal,
     "goto": icon_goto, "kite": icon_kite, "album": icon_album, "settings": icon_settings,
@@ -656,6 +713,8 @@ ICONS = {
     "customise": icon_customise, "newlife": icon_newlife, "graphics": icon_graphics,
     "textsize": icon_textsize, "camera": icon_camera, "motion": icon_motion, "pace": icon_pace,
     "home": icon_home, "close": icon_close, "trophy": icon_trophy,
+    "flower": icon_flower, "lantern": icon_lantern, "star": icon_star, "ticket": icon_ticket,
+    "toyboat": icon_toyboat, "medal": icon_medal, "key": icon_key,
 }
 
 

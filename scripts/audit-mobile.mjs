@@ -2,17 +2,19 @@
 // tabs incl. the kite workshop, pause/settings, go-to, ending, album) at phone, tablet and PC
 // sizes, with measurements a phone player feels: tap targets under 44 px, text under 12 px,
 // sideways scrolling, and controls pushed off-screen.
-// GAME_URL (default http://127.0.0.1:4197/) · OUT (default docs/captures/mobile) · SIZES · LANGS · GPU=1
-import { chromium } from "@playwright/test";
+// GAME_URL (default http://127.0.0.1:4263/) · BROWSER=webkit · OUT (default docs/captures/mobile) · SIZES · LANGS · GPU=1
+import { chromium, webkit } from "@playwright/test";
 import { tsImport } from "tsx/esm/api";
 import { mkdir, writeFile } from "node:fs/promises";
 
 const core = await tsImport("../src/core.ts", import.meta.url);
-const base = process.env.GAME_URL || "http://127.0.0.1:4197/";
+const base = process.env.GAME_URL || "http://127.0.0.1:4263/";
 const out = process.env.OUT || "docs/captures/mobile";
 await mkdir(out, { recursive: true });
 const args = process.env.GPU ? ["--use-angle=d3d11", "--ignore-gpu-blocklist"] : [];
-const browser = await chromium.launch({ headless: true, args });
+// BROWSER=webkit runs Safari's engine (iPhone/iPad behaviour) instead of Chromium.
+const engine = process.env.BROWSER === "webkit" ? webkit : chromium;
+const browser = await engine.launch({ headless: true, args: engine === chromium ? args : [] });
 const sizes = (process.env.SIZES || "390x844m,360x740m,844x390m,820x1180m,1366x768").split(",").map((s) => {
   const mobile = s.endsWith("m");
   const [w, h] = s.replace("m", "").split("x").map(Number);
@@ -89,6 +91,59 @@ async function measure(page, name, tag) {
       const inScroller = el.closest(".tab-body,.ending,.places,.modal,.title-card,.dialog-body,.options,.sheet-body");
       if (!inScroller && (r.right > vw + 1 || r.left < -1 || r.bottom > vh + 1 || r.top < -1)) offscreen.push(`${el.dataset.action || el.name} @${Math.round(r.left)},${Math.round(r.top)}`);
     }
+    // WCAG contrast of every visible piece of text against what is really behind it.
+    const parse = (c) => {
+      const m = c.match(/rgba?\(([^)]+)\)/);
+      if (!m) return null;
+      const [r, g, b, a = 1] = m[1].split(/[ ,/]+/).filter(Boolean).map(Number);
+      return { r, g, b, a };
+    };
+    const lum = ({ r, g, b }) => {
+      const f = (v) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const over = (top, under) => ({ r: top.r * top.a + under.r * (1 - top.a), g: top.g * top.a + under.g * (1 - top.a), b: top.b * top.a + under.b * (1 - top.a), a: 1 });
+    const backdrop = (el) => {
+      // stack translucent layers from the element down to the first opaque one
+      const layers = [];
+      for (let e = el; e && e !== document.body; e = e.parentElement) {
+        const cs = getComputedStyle(e);
+        if (cs.backgroundImage && cs.backgroundImage !== "none" && !cs.backgroundImage.startsWith("url")) return { image: true };
+        const bg = parse(cs.backgroundColor);
+        if (bg && bg.a > 0.01) {
+          layers.push(bg);
+          if (bg.a >= 0.99) break;
+        }
+      }
+      if (!layers.length || layers.at(-1).a < 0.99) return { scene: true };
+      let c = layers.pop();
+      while (layers.length) c = over(layers.pop(), c);
+      return { color: c };
+    };
+    const lowContrast = new Set();
+    let overScene = 0;
+    for (const el of document.querySelectorAll("#ui *")) {
+      if (!el.childNodes.length || ![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
+      if (!visible(el) || el.closest(".sr-only,[aria-hidden='true']")) continue;
+      const cs = getComputedStyle(el);
+      const fg = parse(cs.color);
+      if (!fg) continue;
+      const bd = backdrop(el);
+      if (bd.image) continue;
+      if (bd.scene) {
+        // straight over the 3D view: only legible with a shadow or outline
+        if (cs.textShadow === "none") overScene++, lowContrast.add(`over-3D: ${el.className || el.tagName} "${el.textContent.trim().slice(0, 24)}"`);
+        continue;
+      }
+      const col = fg.a < 1 ? over(fg, bd.color) : fg;
+      const L1 = lum(col),
+        L2 = lum(bd.color);
+      const ratio = (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
+      const size = parseFloat(cs.fontSize),
+        bold = Number(cs.fontWeight) >= 700;
+      const need = size >= 24 || (bold && size >= 18.66) ? 3 : 4.5;
+      if (ratio < need) lowContrast.add(`${ratio.toFixed(2)}<${need} ${el.className || el.tagName} "${el.textContent.trim().slice(0, 24)}"`);
+    }
     const panel = document.querySelector(".dialog,.modal,.cinema,.title-card,.ending");
     const pr = panel?.getBoundingClientRect();
     return {
@@ -96,6 +151,8 @@ async function measure(page, name, tag) {
       small: small.slice(0, 40),
       smallCount: small.length,
       tiny: [...tiny].slice(0, 12),
+      contrast: [...lowContrast].slice(0, 20),
+      contrastCount: lowContrast.size,
       offscreen,
       panel: pr ? `${Math.round(pr.width)}×${Math.round(pr.height)} @${Math.round(pr.top)}` : "",
     };
@@ -207,5 +264,5 @@ for (const lang of langs) {
 }
 await browser.close();
 await writeFile(`${out}/audit.json`, JSON.stringify(rows, null, 2));
-const summary = rows.map((r) => ({ tag: r.tag, name: r.name, overflowX: r.overflowX, small: r.smallCount, tiny: r.tiny?.length, off: r.offscreen?.length, panel: r.panel }));
+const summary = rows.map((r) => ({ tag: r.tag, name: r.name, overflowX: r.overflowX, small: r.smallCount, tiny: r.tiny?.length, contrast: r.contrastCount, off: r.offscreen?.length }));
 console.table(summary);

@@ -362,3 +362,37 @@ save round-trips; it found no rule-breaking bugs. It did find these defects, now
 7. **Hard-coded English and wrong labels:** the page title and the 3D view's label are now
    translated. The last chapter (no clock) no longer says side moments cost "1 hour".
 
+## 8. 1.3.1: contrast, Safari and the last small targets
+
+`scripts/audit-mobile.mjs` now also checks WCAG contrast. For every visible piece of text it
+composites the layers behind it and compares the result: 4.5:1 for normal text, 3:1 for large.
+Text drawn straight over the 3D view must carry a shadow. `BROWSER=webkit` runs the audit and
+the smoke suite in Safari's engine (iPhone/iPad behaviour).
+
+What it found, and the fixes:
+- **Ending buttons:** "Read your journal", "Save a picture", "Album of lives" and "Title" were
+  white text on white buttons (1.00:1). They inherited the ending screen's white text colour.
+  The page had looked fine, because the buttons kept their shape. Every button now sets its
+  own dark text. "Begin chapter" and "Live another life" (white on yellow, 1.61:1) were fixed
+  the same way.
+- **Reward chips and badges:** health, savings and heart chips, the journal count and the
+  "Flying now" badge were 1.9–3.1:1. They use darker shades of the same hues now (4.6–4.8:1),
+  and "Flying now" is dark text on mint.
+- **Labels:** the "Main story" label (3.56:1) and the coral "Choice of Life" title (2.72:1) are
+  darker.
+- **Dialog page dots:** these were 26–32 px buttons. They're a visual progress bar now, with one
+  48 px "previous part" button. On phones the bar and the button sit on their own row, so the
+  dialog title keeps its width.
+- **Keepsake shelf:** in the journal and on the ending it showed blank coloured squares, because
+  their icons were never drawn. Seven new Blender icons (flower, storm lantern, gold star,
+  ticket, toy boat, medal, lighthouse key) join the existing kite, camera, palette, heart and
+  photo icons.
+- **Free time:** the hours in the HUD are toy suns now, and spent hours fade.
+- **Safari:** in WebKit, the "Flying now" badge was clipped above the first row of patterns.
+  Otherwise WebKit draws every screen the same as Chromium, the 3D scenes included.
+- **Test ports:** the test scripts defaulted to ports another project on this machine uses.
+  They now default to 4263.
+
+Result: zero findings on every screen at 390 × 844, 360 × 740, 844 × 390 and 1366 × 768
+(tap targets, text size, contrast, overflow), in Chromium and WebKit.
+

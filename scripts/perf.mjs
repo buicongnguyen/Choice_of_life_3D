@@ -3,7 +3,7 @@
 import { chromium } from "@playwright/test";
 import { tsImport } from "tsx/esm/api";
 const core = await tsImport("../src/core.ts", import.meta.url);
-const base = process.env.GAME_URL || "http://127.0.0.1:4197/";
+const base = process.env.GAME_URL || "http://127.0.0.1:4263/";
 const args = process.env.GPU ? ["--use-angle=d3d11", "--ignore-gpu-blocklist"] : [];
 const browser = await chromium.launch({ headless: true, args });
 const quality = process.env.QUALITY || "high";

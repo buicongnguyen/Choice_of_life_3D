@@ -1,11 +1,11 @@
 // Screenshots of the 1.2 features for review: faces, the sky kite, townsfolk, seasons,
-// fireworks, the workshop and the translated UI. GAME_URL (default http://127.0.0.1:4197/), GPU=1.
+// fireworks, the workshop and the translated UI. GAME_URL (default http://127.0.0.1:4263/), GPU=1.
 import { chromium } from "@playwright/test";
 import { tsImport } from "tsx/esm/api";
 import { mkdir } from "node:fs/promises";
 
 const core = await tsImport("../src/core.ts", import.meta.url);
-const base = process.env.GAME_URL || "http://127.0.0.1:4197/";
+const base = process.env.GAME_URL || "http://127.0.0.1:4263/";
 const args = process.env.GPU ? ["--use-angle=d3d11", "--ignore-gpu-blocklist"] : [];
 const browser = await chromium.launch({ headless: true, args });
 await mkdir("docs/captures", { recursive: true });

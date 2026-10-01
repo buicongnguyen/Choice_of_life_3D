@@ -93,6 +93,7 @@ const ui: Record<UIKey, string> = {
   // beats and dialogue
   "beat.continue": "Tiếp tục",
   "beat.part": "Đoạn {n} trên {total}",
+  "beat.back": "Đoạn trước",
   "beat.remember": "↺ Bạn nhớ lại",
   "beat.skipChoice": "Tới thẳng lựa chọn ▸▸",
   "beat.skip": "Bỏ qua ▸▸",

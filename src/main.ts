@@ -835,6 +835,13 @@ ui.addEventListener("click", async (event) => {
     case "beat-all":
       advanceBeat(true);
       break;
+    case "beat-back":
+      if (beat.index > 0) {
+        beat = { ...beat, index: beat.index - 1 };
+        render();
+        focusBeat();
+      }
+      break;
     case "beat-go": {
       const i = Number(target.dataset.value);
       if (Number.isInteger(i) && i >= 0 && i < beat.list.length && i !== beat.index) {

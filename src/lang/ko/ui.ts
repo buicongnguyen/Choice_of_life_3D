@@ -92,6 +92,7 @@ const ui: Record<UIKey, string> = {
   // beats / dialogs
   "beat.continue": "계속",
   "beat.part": "{n} / {total}",
+  "beat.back": "이전 부분",
   "beat.remember": "↺ 기억 속에서",
   "beat.skipChoice": "선택으로 건너뛰기 ▸▸",
   "beat.skip": "건너뛰기 ▸▸",

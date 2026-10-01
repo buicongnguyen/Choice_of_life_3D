@@ -100,6 +100,7 @@ export const EN_UI = {
   // beats / dialogs
   "beat.continue": "Continue",
   "beat.part": "Part {n} of {total}",
+  "beat.back": "Previous part",
   "beat.remember": "↺ You remember",
   "beat.skipChoice": "Skip to the choice ▸▸",
   "beat.skip": "Skip ▸▸",

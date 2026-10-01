@@ -1,14 +1,16 @@
 // End-to-end smoke test through the real UI (no cheat API; saves are built with the real rules).
-// GAME_URL (default http://127.0.0.1:4196/) · GPU=1 to use the hardware GPU.
-import { chromium } from "@playwright/test";
+// GAME_URL (default http://127.0.0.1:4263/) · GPU=1 to use the hardware GPU.
+import { chromium, webkit } from "@playwright/test";
 import { tsImport } from "tsx/esm/api";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 
 const core = await tsImport("../src/core.ts", import.meta.url);
-const base = process.env.GAME_URL || "http://127.0.0.1:4196/";
+const base = process.env.GAME_URL || "http://127.0.0.1:4263/";
 const args = process.env.GPU ? ["--use-angle=d3d11", "--ignore-gpu-blocklist"] : [];
-const browser = await chromium.launch({ headless: true, args });
+// BROWSER=webkit runs the suite in Safari's engine (iPhone/iPad behaviour).
+const engine = process.env.BROWSER === "webkit" ? webkit : chromium;
+const browser = await engine.launch({ headless: true, args: engine === chromium ? args : [] });
 const errors = [];
 const checks = [];
 await mkdir("docs/captures", { recursive: true });

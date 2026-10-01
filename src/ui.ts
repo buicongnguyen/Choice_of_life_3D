@@ -48,7 +48,7 @@ export type BeatState = { list: { text: string; memory?: boolean }[]; index: num
 /** Beat dots double as a way back: tap one to re-read that part. */
 const dots = (b: BeatState) =>
   b.list.length > 1
-    ? `<span class="dots">${b.list.map((_, i) => `<button type="button" data-action="beat-go" data-value="${i}" class="${i === b.index ? "on" : i < b.index ? "past" : ""}" aria-label="${u("beat.part", { n: i + 1, total: b.list.length })}"${i === b.index ? ' aria-current="step"' : ""}></button>`).join("")}</span>`
+    ? `<span class="dots" role="img" aria-label="${esc(u("beat.part", { n: b.index + 1, total: b.list.length }))}">${b.list.map((_, i) => `<i class="${i === b.index ? "on" : i < b.index ? "past" : ""}"></i>`).join("")}</span>${b.index > 0 ? `<button type="button" class="back" data-action="beat-back" aria-label="${esc(u("beat.back"))}">‹</button>` : ""}`
     : "";
 function beatBlock(b: BeatState, full: string) {
   const cur = b.list[Math.min(b.index, b.list.length - 1)];
@@ -66,6 +66,12 @@ export const icon = (name: string, cls = "") => `<img class="ico3d${cls ? ` ${cl
 const dockBtn = (action: string, ico: string, label: string, extra = "", badge = "") =>
   `<button type="button" class="dock-btn" data-action="${action}" ${extra}>${icon(ico)}<span>${esc(label)}</span>${badge}</button>`;
 const STAT_ICON: Record<Stat, string> = { health: "health", joy: "joy", savings: "savings" };
+/** Keepsakes on the shelf, drawn with the same toy icons. */
+const KEEPSAKE_ICON: Record<string, string> = {
+  kite: "kite", camera: "camera", drawing: "customise", heart: "health", photo: "album", flower: "flower",
+  lantern: "lantern", star: "star", ticket: "ticket", toyboat: "toyboat", medal: "medal", key: "key",
+};
+const keepsakeIcon = (k: string) => `<span class="ks-icon ${k}" aria-hidden="true">${icon(KEEPSAKE_ICON[k] ?? "keepsakes")}</span>`;
 const signed = (v: number) => `${v > 0 ? "+" : ""}${v}`;
 
 export const statInfo: Record<Stat, { icon: string; readonly name: string }> = {
@@ -223,7 +229,7 @@ export function playUI(l: Life, o: { hunt: string; notice: string; saveStatus: s
   const free =
     ch.free > 50
       ? `<span class="all-time">${u("hud.allTime")}</span>`
-      : `<span class="suns" aria-label="${esc(u("hud.freeLeft", { left: freeTime(l), total: ch.free }))}">${Array.from({ length: ch.free }, (_, i) => `<i class="${i < freeTime(l) ? "on" : ""}">☀</i>`).join("")}</span>`;
+      : `<span class="suns" aria-label="${esc(u("hud.freeLeft", { left: freeTime(l), total: ch.free }))}">${Array.from({ length: ch.free }, (_, i) => `<i class="${i < freeTime(l) ? "on" : ""}">${icon("joy")}</i>`).join("")}</span>`;
   return `<header class="hud-top">
    <div class="chapter-chip"><span class="ch-num" aria-hidden="true">${l.chapter + 1}</span><div><span class="kicker">${esc(u("hud.chapterAge", { n: l.chapter + 1, age: ch.age }))} ${seasonChip(l.chapter)}</span><h1>${esc(ch.title)}</h1><span class="place">${esc(ch.place)}</span></div></div>
    ${statsUI(l)}
@@ -421,7 +427,7 @@ export function journalUI(l: Life, tab: string, album: Album, kiteHint = "") {
     body = kiteTab(l, kiteHint);
   } else if (tab === "keepsakes") {
     const ks = keepsakes(l);
-    body = ks.length ? `<div class="keepsakes">${ks.map((k) => `<article><span class="ks-icon ${k.icon}" aria-hidden="true"></span><small>${u("keepsakes.chapter", { n: k.chapter + 1 })}</small><strong>${esc(k.title)}</strong><p>${esc(k.text)}</p></article>`).join("")}</div>` : `<p>${u("keepsakes.empty")}</p>`;
+    body = ks.length ? `<div class="keepsakes">${ks.map((k) => `<article>${keepsakeIcon(k.icon)}<small>${u("keepsakes.chapter", { n: k.chapter + 1 })}</small><strong>${esc(k.title)}</strong><p>${esc(k.text)}</p></article>`).join("")}</div>` : `<p>${u("keepsakes.empty")}</p>`;
   } else if (tab === "paths") {
     body = pathsTab(l, album);
   } else {
@@ -469,7 +475,7 @@ export function endingUI(l: Life, o: { canShare: boolean; album: boolean }) {
      .map((b) => `<article class="person"><div><strong>${esc(bondName(b, l))}</strong></div>${hearts(l.bonds[b])}</article>`)
      .join("")}</div></section>
    <section class="shelf"><h2>${u("end.kept")}</h2><div class="keepsakes">${keepsakes(l)
-     .map((k) => `<article><span class="ks-icon ${k.icon}" aria-hidden="true"></span><strong>${esc(k.title)}</strong></article>`)
+     .map((k) => `<article>${keepsakeIcon(k.icon)}<strong>${esc(k.title)}</strong></article>`)
      .join("")}</div></section>
    <p class="closing">${u("end.closing")}</p>
    <div class="actions share">${btn("card-save", `${icon("camera")}<span>${u("end.picture")}</span>`, "secondary")}${o.canShare ? btn("card-share", `${icon("goto")}<span>${u("end.share")}</span>`, "secondary") : ""}${o.album ? btn("album", `${icon("album")}<span>${u("end.album")}</span>`, "secondary") : ""}</div>
