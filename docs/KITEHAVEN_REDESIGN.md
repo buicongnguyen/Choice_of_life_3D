@@ -396,3 +396,50 @@ What it found, and the fixes:
 Result: zero findings on every screen at 390 × 844, 360 × 740, 844 × 390 and 1366 × 768
 (tap targets, text size, contrast, overflow), in Chromium and WebKit.
 
+## 9. 1.3.2: feet that stay on the floor
+
+### What was wrong
+The legs swung on a fixed sine whose speed was a hand-picked factor (5.2 radians per unit of
+travel). `scripts/gait-probe.mjs` reads both soles every frame through a `?gaitprobe` test hook
+and measured:
+
+| | Before | After |
+| --- | --- | --- |
+| Steps per second (player) | 7–12 (a whir) | 2.9–5.0 (gentle pace to a kid at full tilt) |
+| Step length | 0.28–0.30 | 0.58–0.79 |
+| Feet on the floor | 35–44% of the time | 73–81% (the rest is a running float) |
+| Slip of a planted foot along the floor | 130–190% of the body's travel | 0% (player and townsfolk) |
+| Lowest sole | 0.000 | 0.000 (never through the floor) |
+
+The body also bobbed up when the legs were spread, which is backwards for a rigid leg.
+
+### The fix (`src/gait.ts`, after the "stride wheel": phase by distance, not time)
+- **The phase advances with distance travelled.** One full cycle covers exactly the distance a
+  planted foot spends on the floor divided by the share of the cycle it stays down. So the floor
+  and the feet move together whatever the speed.
+- **Planted feet are solved, not swung.** While a foot is down, the leg is aimed at the spot
+  where it landed. The legs are rigid toy legs on a hip pivot; they telescope slightly, which
+  stands in for a knee. The angle and the length both come from that target, so the foot can't
+  drag.
+- **Walk or run by the Froude number (v²/gL), as in people.** The 0.85 u/s townsfolk walk: long
+  stance, both feet down at the changeover, the body vaulting over a straight leg. The player
+  (2.3–3.6 u/s) runs: short stance, a springy leg that shortens mid-stance, a float phase, a
+  forward lean, and bigger arm swing against the legs.
+- **Swing feet lift clear.** The leg shortens mid-swing.
+- **Starting and stopping:** the stride eases in and out over about 0.15 s.
+- **Speed is measured in the simulation step.** Frame timestamps can disagree with simulation
+  time: in headless Chrome under load, frames reported 25.7 ms while the simulation advanced
+  16.7 ms. With the frame-based estimate the game thought the player was at 63% of their real
+  speed and chose a too-short stride.
+- **Bodies keep their own pace.** An older body jogs a little slower (0.85×) with a gentler
+  stride. Townsfolk elders stroll at 0.6. The sitting baby now scoots at half speed with one
+  shuffle per 0.4 units instead of rushing across the nursery.
+
+`src/gait.test.ts` checks the kinematics exactly as the 3D scene draws them (a leg of length
+leg × scale rotated about the hip):
+- planted soles never move (to 1e-9);
+- no sole dips below the floor;
+- cadence stays natural;
+- a run has a flight phase, a walk has double support;
+- standing is straight.
+

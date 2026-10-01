@@ -19,6 +19,7 @@ import { u } from "./i18n";
 import { buildKite, kiteLook, lookOf, type KiteLook } from "./kite-art";
 import { FIREWORKS, TOWN_TOPS, WALKERS, seasonOf, type Season } from "./town";
 import type { Mood } from "./moods";
+import { cycleLength, gaitPose, gaitShape } from "./gait";
 import { activeColliders, clearSegment, findPath, free, recoverPosition, withinPickup, approach, navigation, type Collider, type SceneLayout } from "./navigation";
 
 export type PlaceKind = "person" | "discovery" | "activity" | "hunt" | "exit";
@@ -39,6 +40,13 @@ type Actor = {
   /** 0..1 blend of the brow pose towards the current mood. */
   moodBlend: number;
   limbs: (T.Object3D | undefined)[];
+  /** Speed-true legs (see gait.ts): distance travelled drives the phase, never time. */
+  walk: { dist: number; seen: number; phase: number; vel: number; amount: number; simVel?: boolean };
+  /** Hip height above the sole (model units) and the leg pivots' resting heights. */
+  legLen: number;
+  legBase: [number, number];
+  /** < 1 for older bodies: a gentler stride and bounce. */
+  energy: number;
   facing: number;
   blink: number;
   wave: number;
@@ -48,7 +56,7 @@ type Actor = {
   bodyY: number;
   height: number;
 };
-type Walker = Actor & { route: { x: number; z: number }[]; wait: number; gait: number; rnd: () => number };
+type Walker = Actor & { route: { x: number; z: number }[]; wait: number; rnd: () => number };
 type Fireworks = { obj: T.Points; pos: Float32Array; col: Float32Array; base: Float32Array; vel: Float32Array; life: Float32Array; max: Float32Array; next: number; cursor: number };
 type Point = { place: Place; root: T.Group; marker?: T.Sprite; label?: T.Sprite; spin?: T.Object3D; ring?: T.Mesh };
 
@@ -139,7 +147,6 @@ export class World {
   private keys = new Set<string>();
   private touch = { x: 0, y: 0 };
   private walking = false;
-  private gait = 0;
   private press?: { id: number; x: number; y: number };
   private observer: ResizeObserver;
   private anims: { obj: T.Object3D; kind: string; base: T.Euler; baseY: number; seed: number }[] = [];
@@ -156,6 +163,9 @@ export class World {
   private hover = "";
   private graphics;
   private titleMode = false;
+  /** Test hook (?gaitprobe): the player's soles every rendered frame, for the foot-slip probe. */
+  private probeGait = typeof location !== "undefined" && new URLSearchParams(location.search).has("gaitprobe");
+  private gaitTrace: { t: number; x: number; z: number; feet: { x: number; y: number; z: number }[]; walker?: { x: number; z: number; feet: { x: number; y: number; z: number }[] } }[] = [];
   /** On the title: the wide festival shot, or a close-up of your avatar while you customise. */
   private titleView: "wide" | "avatar" = "wide";
   private titleKite?: T.Object3D;
@@ -341,6 +351,10 @@ export class World {
     const s = look.scale ?? 1;
     root.scale.setScalar(s);
     const get = (n: string) => root.getObjectByName(n);
+    for (const n of ["LegL", "LegR"]) {
+      const leg = get(n);
+      if (leg) leg.userData.hip = leg.position.y; // the sole sits on y = 0 in model space
+    }
     const body = get("Body");
     return {
       who,
@@ -364,6 +378,10 @@ export class World {
       talk: 0,
       baby: look.kind === "baby",
       bodyY: body?.position.y ?? 0,
+      walk: { dist: 0, seen: 0, phase: 0, vel: 0, amount: 0 },
+      legLen: (get("LegL")?.userData.hip as number) || 0.45,
+      legBase: [get("LegL")?.position.y ?? 0, get("LegR")?.position.y ?? 0],
+      energy: look.kind === "elder" ? 0.75 : 1,
       height: ({ baby: 0.95, kid: 1.35, adult: 1.62, elder: 1.56 } as const)[look.kind] * s,
     };
   }
@@ -1261,7 +1279,8 @@ export class World {
       beforeZ = this.playerPosition.z;
     if (direction.lengthSq() > 1e-6) {
       direction.normalize();
-      const speed = this.player.baby ? this.speed * 0.72 : this.speed;
+      // a baby scoots and an older body jogs gently; their legs set the pace (see gait.ts)
+      const speed = this.speed * (this.player.baby ? 0.5 : this.player.energy < 1 ? 0.85 : 1);
       const amount = Math.min(speed * dt, routeDistance);
       const x = this.playerPosition.x + direction.x * amount,
         z = this.playerPosition.z + direction.z * amount;
@@ -1278,7 +1297,10 @@ export class World {
     }
     const traveled = Math.hypot(this.playerPosition.x - beforeX, this.playerPosition.z - beforeZ);
     this.walking = traveled > 1e-5;
-    this.gait += (traveled * 5.2) / (this.player.baby ? 0.6 : 1);
+    const pw = this.player.walk;
+    pw.dist += traveled;
+    pw.simVel = true;
+    pw.vel = T.MathUtils.damp(pw.vel, traveled / dt / (this.player.root.scale.x || 1), 12, dt);
     this.player.root.position.copy(this.playerPosition);
     // Collectables pick themselves up; people, activities and exits need a decision.
     for (const p of [...this.points]) {
@@ -1313,23 +1335,46 @@ export class World {
     }
   }
 
-  private animateActor(a: Actor, moving: boolean, t: number, dt: number, gait = this.gait) {
-    const swing = moving ? Math.sin(gait) : 0;
+  private animateActor(a: Actor, moving: boolean, t: number, dt: number) {
     const [armL, armR, legL, legR] = a.limbs;
+    const w = a.walk;
+    // Distance since the last frame, in the model's own units (actors can be scaled).
+    const scale = a.root.scale.x || 1;
+    const dd = Math.min(0.5, Math.max(0, w.dist - w.seen)) / scale;
+    w.seen = w.dist;
+    // Walkers move in render time, so their speed is measured here; the player's comes from the
+    // fixed simulation step (frame timestamps can disagree with simulation time under load).
+    if (!w.simVel && dt > 0) w.vel = T.MathUtils.damp(w.vel, dd / dt, 12, dt);
+    w.amount = T.MathUtils.damp(w.amount, moving ? 1 : 0, moving ? 10 : 7, dt);
     if (a.baby) {
-      if (armL) armL.rotation.x = moving ? swing * 0.5 : 0;
-      if (armR) armR.rotation.x = moving ? -swing * 0.5 : 0;
-      if (legL) legL.rotation.x = moving ? -swing * 0.25 : 0;
-      if (legR) legR.rotation.x = moving ? swing * 0.25 : 0;
+      // a sitting baby scoots: one shuffle per 0.4 of travel, a little hop, paddling arms and legs
+      w.phase = (w.phase + dd / 0.4) % 1;
+      const swing = Math.sin(w.phase * Math.PI * 2) * w.amount;
+      if (armL) armL.rotation.x = swing * 0.55;
+      if (armR) armR.rotation.x = -swing * 0.55;
+      if (legL) legL.rotation.x = -swing * 0.3;
+      if (legR) legR.rotation.x = swing * 0.3;
+      if (a.body) {
+        a.body.position.y = a.bodyY + Math.abs(Math.sin(w.phase * Math.PI * 2)) * 0.035 * w.amount + (1 - w.amount) * Math.sin(t * 2.1) * 0.006;
+        a.body.rotation.x = 0.05 * w.amount;
+      }
     } else {
-      if (legL) legL.rotation.x = swing * 0.55;
-      if (legR) legR.rotation.x = -swing * 0.55;
-      if (armL) armL.rotation.x = -swing * 0.5;
-      if (armR && a.wave <= 0) armR.rotation.x = swing * 0.5;
-    }
-    if (a.body) {
-      a.body.position.y = a.bodyY + (moving ? Math.abs(Math.sin(gait)) * 0.045 : Math.sin(t * 2.1) * 0.006);
-      a.body.rotation.x = moving ? 0.06 : 0;
+      const shape = gaitShape(Math.max(0.3, w.vel), a.legLen, a.energy);
+      const reach = shape.reach * Math.max(0.02, w.amount);
+      w.phase = (w.phase + dd / cycleLength({ ...shape, reach }, a.legLen)) % 1;
+      const pose = gaitPose(w.phase, shape, a.legLen, w.amount);
+      [legL, legR].forEach((leg, i) => {
+        if (!leg) return;
+        leg.rotation.x = pose.legs[i].angle;
+        leg.scale.y = pose.legs[i].scale;
+        leg.position.y = a.legBase[i] + pose.hipDrop;
+      });
+      if (armL) armL.rotation.x = pose.arms[0];
+      if (armR && a.wave <= 0) armR.rotation.x = pose.arms[1];
+      if (a.body) {
+        a.body.position.y = a.bodyY + pose.hipDrop + (1 - w.amount) * Math.sin(t * 2.1) * 0.006;
+        a.body.rotation.x = pose.lean;
+      }
     }
     if (a.head && !this.reducedMotion) a.head.rotation.z = Math.sin(t * 1.3) * 0.03;
     // blink, and the mood on the face
@@ -1394,6 +1439,7 @@ export class World {
     const adt = Math.min(elapsed / 1000, 0.08);
     const t = this.clock;
     if (this.player) this.animateActor(this.player, this.active && this.walking, t, adt);
+    if (this.probeGait && this.player && !this.titleMode) this.recordGait();
     for (const a of this.actors) {
       const dx = this.playerPosition.x - a.root.position.x,
         dz = this.playerPosition.z - a.root.position.z;
@@ -1591,7 +1637,7 @@ export class World {
       a.root.position.set(spot.x, 0, spot.z);
       a.root.rotation.y = rnd() * Math.PI * 2;
       this.cast.add(a.root);
-      this.walkers.push({ ...a, route: [], wait: 0.5 + rnd() * 3, gait: 0, rnd });
+      this.walkers.push({ ...a, route: [], wait: 0.5 + rnd() * 3, rnd });
     });
   }
 
@@ -1685,7 +1731,7 @@ export class World {
         const vx = next.x - wk.root.position.x,
           vz = next.z - wk.root.position.z;
         const d = Math.hypot(vx, vz);
-        const step = Math.min(d, adt * (wk.baby ? 0.5 : 0.85));
+        const step = Math.min(d, adt * (wk.energy < 1 ? 0.6 : 0.85));
         if (d < 0.03) {
           wk.route.shift();
           if (!wk.route.length) wk.wait = 1.5 + wk.rnd() * 3.5;
@@ -1695,11 +1741,11 @@ export class World {
           const want = Math.atan2(vx, vz);
           const cur = wk.root.rotation.y;
           wk.root.rotation.y = cur + Math.atan2(Math.sin(want - cur), Math.cos(want - cur)) * Math.min(1, adt * 6);
-          wk.gait += step * 5.2;
+          wk.walk.dist += step;
           moving = true;
         }
       }
-      this.animateActor(wk, moving, t + wk.who.length * 1.7, adt, wk.gait);
+      this.animateActor(wk, moving, t + wk.who.length * 1.7, adt);
     }
     // fireworks
     const f = this.fireworks;
@@ -1744,6 +1790,28 @@ export class World {
     actor.wave = 1.2;
   }
 
+  /** Where each sole of the player (and the first townsperson) is: the leg's bottom below its hip pivot. */
+  private recordGait() {
+    const soles = (a: Actor) => {
+      a.root.updateMatrixWorld(true);
+      return [a.limbs[2], a.limbs[3]].map((leg) => {
+        const L = (leg?.userData.hip as number) ?? 0;
+        const v = new T.Vector3(0, -L, 0).applyMatrix4(leg!.matrixWorld);
+        return { x: v.x, y: v.y, z: v.z };
+      });
+    };
+    const a = this.player!;
+    const w = this.walkers[0];
+    this.gaitTrace.push({
+      t: performance.now(),
+      x: a.root.position.x,
+      z: a.root.position.z,
+      feet: soles(a),
+      walker: w ? { x: w.root.position.x, z: w.root.position.z, feet: soles(w) } : undefined,
+    });
+    if (this.gaitTrace.length > 900) this.gaitTrace.shift();
+  }
+
   diagnostics() {
     return {
       quality: this.quality,
@@ -1759,6 +1827,8 @@ export class World {
       actors: this.actors.map((a) => a.who),
       points: this.points.map((p) => p.place.id),
       walking: this.walking,
+      gait: this.probeGait ? this.gaitTrace.splice(0) : undefined,
+      stride: this.player ? { vel: +this.player.walk.vel.toFixed(3), amount: +this.player.walk.amount.toFixed(3), dist: +this.player.walk.dist.toFixed(3) } : null,
       walkers: this.walkers.length,
       skyKite: this.skyKite?.key ?? null,
       fireworks: !!this.fireworks,
