@@ -111,3 +111,97 @@ export function gaitPose(phase: number, shape: GaitShape, leg: number, amount = 
   const arms: [number, number] = [-poses[0].angle * shape.arms, -poses[1].angle * shape.arms];
   return { legs: poses, arms, hipDrop: hip - leg, lean: shape.lean * amount };
 }
+
+/**
+ * A baby's hands-and-knees crawl. The sitting baby leans forward onto four limbs. Diagonal
+ * pairs move together (left hand with right knee), as crawling babies do, and every contact
+ * is solved exactly like a planted foot. Limbs keep their authored bend (they're angled, not
+ * straight down), so each is aimed by turning its rest tip onto the target and scaling it
+ * uniformly.
+ */
+export type Vec = { y: number; z: number };
+export type CrawlRig = {
+  /** Body pivot height; shoulders are children of the body, hips of the root. */
+  bodyY: number;
+  shoulder: Vec;
+  hip: Vec;
+  /** Rest tips (the lowest point of hand and foot) relative to their pivots. */
+  armTip: Vec;
+  legTip: Vec;
+};
+// Tuned so limbs stay 85–106% of their authored size (planted ones ≥ 92%) and the raised hips
+// stay inside the round body (see docs/KITEHAVEN_REDESIGN.md §10).
+export const CRAWL = {
+  pitch: 1.1, // body lean when crawling (radians, about 63°)
+  hipLift: 0.12, // hips up off the floor onto the knees
+  stance: 0.5, // each limb is down half the cycle: a trot-like diagonal crawl
+  reach: 0.1, // a contact travels this far either side of its centre
+  armCentre: 0.03, // hands land just ahead of the shoulders
+  legCentre: -0.04, // knees just behind the hips
+  lift: 0.02, // how high a swinging hand or knee clears the floor
+  head: 0.8, // share of the lean the head takes back, to keep looking ahead
+};
+export const crawlCycle = () => (2 * CRAWL.reach) / CRAWL.stance;
+export type LimbPose = { rotation: number; scale: number; planted: boolean };
+export type CrawlPose = {
+  pitch: number;
+  hipLift: number;
+  /** Lift for the whole baby (body and hips) so no limb dips below the floor mid-blend; 0 while crawling. */
+  lift: number;
+  headTilt: number;
+  limbs: [LimbPose, LimbPose, LimbPose, LimbPose];
+};
+
+const forwardAngle = (v: Vec) => Math.atan2(v.z, -v.y);
+
+/** Limbs in order armL, armR, legL, legR; `amount` blends from sitting (0) to crawling (1). */
+export function crawlPose(phase: number, rig: CrawlRig, amount = 1): CrawlPose {
+  const p = CRAWL.pitch;
+  // where the shoulders sit once the body leans (rotation about x by p)
+  const sy = rig.shoulder.y * Math.cos(p) - rig.shoulder.z * Math.sin(p);
+  const sz = rig.shoulder.y * Math.sin(p) + rig.shoulder.z * Math.cos(p);
+  const shoulder = { y: rig.bodyY + sy, z: sz };
+  const hip = { y: rig.hip.y + CRAWL.hipLift, z: rig.hip.z };
+  const limb = (offset: number, pivot: Vec, tip: Vec, centre: number, isArm: boolean): LimbPose => {
+    const u = (((phase + offset) % 1) + 1) % 1;
+    let ahead: number,
+      clear = 0;
+    const planted = u < CRAWL.stance;
+    if (planted) ahead = centre + CRAWL.reach - (u / CRAWL.stance) * 2 * CRAWL.reach;
+    else {
+      const w = (u - CRAWL.stance) / (1 - CRAWL.stance);
+      ahead = centre - CRAWL.reach + 2 * CRAWL.reach * smoother(w);
+      clear = CRAWL.lift * Math.sin(Math.PI * w);
+    }
+    const down = pivot.y - clear;
+    const want = Math.atan2(ahead, down);
+    // An arm turns with the leaning body (a forward lean swings a hanging arm back by p).
+    const rest = forwardAngle(tip) - (isArm ? p : 0);
+    const rotation = rest - want;
+    const scale = Math.hypot(ahead, down) / Math.hypot(tip.y, tip.z);
+    return {
+      rotation: rotation * amount,
+      scale: 1 + (scale - 1) * amount,
+      planted,
+    };
+  };
+  const limbs: CrawlPose["limbs"] = [
+    limb(0, shoulder, rig.armTip, CRAWL.armCentre, true),
+    limb(0.5, shoulder, rig.armTip, CRAWL.armCentre, true),
+    limb(0.5, hip, rig.legTip, CRAWL.legCentre, false),
+    limb(0, hip, rig.legTip, CRAWL.legCentre, false),
+  ];
+  const pitch = p * amount,
+    hipLift = CRAWL.hipLift * amount;
+  // Blending from sitting swings the forward legs down through the floor before the hips rise:
+  // lift the whole baby by however far the lowest limb would sink (zero once fully crawling).
+  const tipY = (l: LimbPose, k: number) => {
+    const arm = k < 2;
+    const base = arm ? rig.bodyY + rig.shoulder.y * Math.cos(pitch) - rig.shoulder.z * Math.sin(pitch) : rig.hip.y + hipLift;
+    const tip = arm ? rig.armTip : rig.legTip;
+    const a = (arm ? pitch : 0) + l.rotation;
+    return base + l.scale * (tip.y * Math.cos(a) - tip.z * Math.sin(a));
+  };
+  const lowest = Math.min(...limbs.map(tipY));
+  return { pitch, hipLift, lift: amount < 1 ? Math.max(0, -lowest) : 0, headTilt: -CRAWL.head * p * amount, limbs };
+}

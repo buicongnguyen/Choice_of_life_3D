@@ -43,7 +43,7 @@ function analyse(trace) {
     dist = 0,
     time = 0;
   // a foot has to leave the floor before its next touchdown counts as a step
-  const lifted = [false, false];
+  const lifted = [false, false, false, false];
   let steadyDist = 0,
     steadyTime = 0,
     steadyOnsets = 0;
@@ -62,7 +62,7 @@ function analyse(trace) {
       steadyTime += dt;
     }
     let any = false;
-    for (let f = 0; f < 2; f++) {
+    for (let f = 0; f < b.feet.length; f++) {
       const p = a.feet[f],
         q = b.feet[f];
       lowest = Math.min(lowest, q.y);
@@ -116,12 +116,13 @@ function walkerSlip(trace) {
 
 const rows = [];
 for (const [label, chapter, pace] of [
+  ["baby (hands+knees)", 0, "normal"],
   ["kid", 2, "normal"],
   ["adult", 6, "normal"],
   ["adult gentle", 6, "gentle"],
   ["adult brisk", 6, "brisk"],
   ["elder", 10, "normal"],
-]) {
+].filter(([l]) => !process.env.ONLY || l.startsWith(process.env.ONLY))) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await page.addInitScript(
     ({ key, save, pace }) => {
@@ -147,7 +148,13 @@ for (const [label, chapter, pace] of [
     const part = await page.evaluate(() => window.lifeDiagnostics.render.gait);
     for (const s of part) s.since = (s.t - part[0].t) / 1000;
     trace.push(...part);
-    if (process.env.DUMP === label) console.log(label, part.slice(40, 75).map((s, i, all) => `${i ? Math.hypot(s.x - all[i - 1].x, s.z - all[i - 1].z).toFixed(3) : "-"}:${s.feet.map((f) => f.y.toFixed(3)).join("/")}`).join(" "));
+    if (process.env.DUMP && label.startsWith(process.env.DUMP)) {
+      const low = part.map((s) => s.feet.map((f) => f.y));
+      const worst = low.flat().reduce((m, y) => Math.min(m, y), 0);
+      const at = low.findIndex((ys) => ys.some((y) => y === worst));
+      console.log(label, "lowest", worst.toFixed(3), "at frame", at, "of", part.length, "since", part[at]?.since.toFixed(2), "limbs", low[at]?.map((y) => y.toFixed(3)).join("/"));
+    }
+    if (false) console.log(label, part.slice(40, 75).map((s, i, all) => `${i ? Math.hypot(s.x - all[i - 1].x, s.z - all[i - 1].z).toFixed(3) : "-"}:${s.feet.map((f) => f.y.toFixed(3)).join("/")}`).join(" "));
     await page.keyboard.up(key);
     await page.waitForTimeout(400);
     await page.evaluate(() => window.lifeDiagnostics.render.gait);

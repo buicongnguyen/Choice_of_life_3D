@@ -19,7 +19,7 @@ import { u } from "./i18n";
 import { buildKite, kiteLook, lookOf, type KiteLook } from "./kite-art";
 import { FIREWORKS, TOWN_TOPS, WALKERS, seasonOf, type Season } from "./town";
 import type { Mood } from "./moods";
-import { cycleLength, gaitPose, gaitShape } from "./gait";
+import { crawlCycle, crawlPose, cycleLength, gaitPose, gaitShape, type CrawlRig } from "./gait";
 import { activeColliders, clearSegment, findPath, free, recoverPosition, withinPickup, approach, navigation, type Collider, type SceneLayout } from "./navigation";
 
 export type PlaceKind = "person" | "discovery" | "activity" | "hunt" | "exit";
@@ -47,6 +47,10 @@ type Actor = {
   legBase: [number, number];
   /** < 1 for older bodies: a gentler stride and bounce. */
   energy: number;
+  /** The baby's crawl: pivots and the lowest points of hands and feet, read from its model. */
+  crawl?: CrawlRig;
+  /** Extra head pitch from the crawl, so the baby keeps looking ahead. */
+  headTilt: number;
   facing: number;
   blink: number;
   wave: number;
@@ -95,6 +99,50 @@ const BROWS: Record<Mood, { tilt: number; lift: number }> = {
   cross: { tilt: -0.42, lift: -0.4 },
 };
 const restMouth = (m: Mood) => (m === "sad" || m === "worried" || m === "cross" ? "sad" : "smile");
+
+/**
+ * The baby's crawl rig, read from its model: body and limb pivots, and each limb's rest tip
+ * (the lowest point of the hand or foot, in the limb's own frame). Tips are kept on the limbs
+ * for the foot-slip probe.
+ */
+function crawlRig(root: T.Object3D): CrawlRig | undefined {
+  const get = (n: string) => root.getObjectByName(n);
+  const body = get("Body"),
+    arm = get("ArmL"),
+    leg = get("LegL");
+  if (!body || !arm || !leg) return undefined;
+  root.updateMatrixWorld(true);
+  const tip = (limb: T.Object3D) => {
+    const inv = limb.matrixWorld.clone().invert();
+    const v = new T.Vector3();
+    let low = Infinity,
+      zs: number[] = [];
+    limb.traverse((o) => {
+      if (!(o instanceof T.Mesh)) return;
+      const m = inv.clone().multiply(o.matrixWorld);
+      const pos = o.geometry.getAttribute("position");
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(m);
+        if (v.y < low - 0.004) {
+          low = v.y;
+          zs = [v.z];
+        } else if (v.y < low + 0.004) zs.push(v.z);
+      }
+    });
+    return { y: low, z: zs.reduce((s, z) => s + z, 0) / Math.max(1, zs.length) };
+  };
+  for (const n of ["ArmL", "ArmR", "LegL", "LegR"]) {
+    const limb = get(n);
+    if (limb) limb.userData.tip = tip(limb);
+  }
+  return {
+    bodyY: body.position.y,
+    shoulder: { y: arm.position.y, z: arm.position.z },
+    hip: { y: leg.position.y, z: leg.position.z },
+    armTip: arm.userData.tip,
+    legTip: leg.userData.tip,
+  };
+}
 
 export function playerLook(id: Identity, chapter: number, l?: Life): Look {
   const skin = SKINS[id.skin] ?? SKINS[0];
@@ -382,6 +430,8 @@ export class World {
       legLen: (get("LegL")?.userData.hip as number) || 0.45,
       legBase: [get("LegL")?.position.y ?? 0, get("LegR")?.position.y ?? 0],
       energy: look.kind === "elder" ? 0.75 : 1,
+      crawl: look.kind === "baby" ? crawlRig(root) : undefined,
+      headTilt: 0,
       height: ({ baby: 0.95, kid: 1.35, adult: 1.62, elder: 1.56 } as const)[look.kind] * s,
     };
   }
@@ -1280,7 +1330,7 @@ export class World {
     if (direction.lengthSq() > 1e-6) {
       direction.normalize();
       // a baby scoots and an older body jogs gently; their legs set the pace (see gait.ts)
-      const speed = this.speed * (this.player.baby ? 0.5 : this.player.energy < 1 ? 0.85 : 1);
+      const speed = this.speed * (this.player.baby ? 0.3 : this.player.energy < 1 ? 0.85 : 1);
       const amount = Math.min(speed * dt, routeDistance);
       const x = this.playerPosition.x + direction.x * amount,
         z = this.playerPosition.z + direction.z * amount;
@@ -1346,18 +1396,21 @@ export class World {
     // fixed simulation step (frame timestamps can disagree with simulation time under load).
     if (!w.simVel && dt > 0) w.vel = T.MathUtils.damp(w.vel, dd / dt, 12, dt);
     w.amount = T.MathUtils.damp(w.amount, moving ? 1 : 0, moving ? 10 : 7, dt);
-    if (a.baby) {
-      // a sitting baby scoots: one shuffle per 0.4 of travel, a little hop, paddling arms and legs
-      w.phase = (w.phase + dd / 0.4) % 1;
-      const swing = Math.sin(w.phase * Math.PI * 2) * w.amount;
-      if (armL) armL.rotation.x = swing * 0.55;
-      if (armR) armR.rotation.x = -swing * 0.55;
-      if (legL) legL.rotation.x = -swing * 0.3;
-      if (legR) legR.rotation.x = swing * 0.3;
+    if (a.baby && a.crawl) {
+      // the baby leans onto hands and knees and crawls, every contact planted (see gait.ts)
+      w.phase = (w.phase + dd / crawlCycle()) % 1;
+      const pose = crawlPose(w.phase, a.crawl, w.amount);
+      [armL, armR, legL, legR].forEach((limb, i) => {
+        if (!limb || (i === 1 && a.wave > 0)) return;
+        limb.rotation.x = pose.limbs[i].rotation;
+        limb.scale.setScalar(pose.limbs[i].scale);
+        if (i >= 2) limb.position.y = a.legBase[i - 2] + pose.hipLift + pose.lift;
+      });
       if (a.body) {
-        a.body.position.y = a.bodyY + Math.abs(Math.sin(w.phase * Math.PI * 2)) * 0.035 * w.amount + (1 - w.amount) * Math.sin(t * 2.1) * 0.006;
-        a.body.rotation.x = 0.05 * w.amount;
+        a.body.position.y = a.bodyY + pose.lift + (1 - w.amount) * Math.sin(t * 2.1) * 0.006;
+        a.body.rotation.x = pose.pitch;
       }
+      a.headTilt = pose.headTilt;
     } else {
       const shape = gaitShape(Math.max(0.3, w.vel), a.legLen, a.energy);
       const reach = shape.reach * Math.max(0.02, w.amount);
@@ -1408,10 +1461,10 @@ export class World {
       a.talk -= dt;
       const open = Math.sin(t * 22) > 0.1 && a.talk > 0.2;
       this.mouth(a, open ? "open" : restMouth(mood));
-      if (a.head) a.head.rotation.x = Math.sin(t * 7) * 0.05;
+      if (a.head) a.head.rotation.x = Math.sin(t * 7) * 0.05 + a.headTilt;
     } else {
       this.mouth(a, mood === "surprised" ? "open" : restMouth(mood));
-      if (a.head) a.head.rotation.x = mood === "sad" ? 0.12 : 0;
+      if (a.head) a.head.rotation.x = (mood === "sad" ? 0.12 : 0) + a.headTilt;
     }
   }
 
@@ -1794,9 +1847,10 @@ export class World {
   private recordGait() {
     const soles = (a: Actor) => {
       a.root.updateMatrixWorld(true);
-      return [a.limbs[2], a.limbs[3]].map((leg) => {
-        const L = (leg?.userData.hip as number) ?? 0;
-        const v = new T.Vector3(0, -L, 0).applyMatrix4(leg!.matrixWorld);
+      const limbs = a.crawl ? a.limbs : [a.limbs[2], a.limbs[3]];
+      return limbs.map((limb) => {
+        const tip = limb?.userData.tip as { y: number; z: number } | undefined;
+        const v = (tip ? new T.Vector3(0, tip.y, tip.z) : new T.Vector3(0, -((limb?.userData.hip as number) ?? 0), 0)).applyMatrix4(limb!.matrixWorld);
         return { x: v.x, y: v.y, z: v.z };
       });
     };

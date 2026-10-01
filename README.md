@@ -53,7 +53,7 @@ Node.js 22 or newer.
 ```sh
 npm ci
 npm run dev          # http://127.0.0.1:5173
-npm test             # rules, saves, endings, content, beats, navigation, features, gait, vi/ko packs (45 tests)
+npm test             # rules, saves, endings, content, beats, navigation, features, gait, vi/ko packs (48 tests)
 npm run build        # type-check, bundle, write dist/release.json
 npm run preview
 ```
@@ -68,7 +68,7 @@ GPU=1 node scripts/audit-mobile.mjs           # every screen at phone/tablet/PC 
                                               # text under 12 px, WCAG contrast, overflow (LANGS=vi,ko)
 GPU=1 node scripts/capture.mjs                # screenshots of all 12 chapters
 GPU=1 node scripts/perf.mjs                   # frame times, draw calls
-GPU=1 node scripts/gait-probe.mjs             # do the feet stay planted? slip, cadence, step length
+GPU=1 node scripts/gait-probe.mjs             # do feet (and the baby's hands and knees) stay planted?
 npx tsx scripts/balance.mts                   # 400 random lives: stats and endings
 npx tsx scripts/textstats.mts                 # how much text each screen shows
 node scripts/audit-ui.mjs                     # message sizes at PC resolutions

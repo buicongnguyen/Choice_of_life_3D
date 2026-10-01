@@ -443,3 +443,31 @@ leg × scale rotated about the hip):
 - a run has a flight phase, a walk has double support;
 - standing is straight.
 
+## 10. 1.3.3: the baby crawls
+
+The chapter-1 baby is authored sitting, with its legs stretched out in front. It used to scoot
+on its bottom, so nothing was planted. Now, once it moves, it leans onto hands and knees and
+crawls (`crawlPose` in `src/gait.ts`):
+- **Diagonal pairs move together** (left hand with right knee), as crawling babies do. Each
+  limb is down half the cycle, so two contacts are always on the floor.
+- **Every hand and knee is solved like a planted foot.** The baby's limbs are bent, not straight
+  down, so each is aimed by turning its rest tip onto the target and scaling it uniformly. The
+  rest tips (the lowest point of each hand and foot) are read from the model's geometry, not
+  copied from the Blender script.
+- **Looks:** the body leans about 63°, the hips rise onto the knees and stay inside the round
+  body, and the head takes back 80% of the lean so the baby keeps looking ahead.
+- **Tuning:** limbs stay at 85–106% of their authored size (planted ones at least 92%). The
+  settings came from scanning the lean, hip lift and contact positions for the smallest
+  stretch.
+- **Starting and stopping:** it blends from sitting to crawling and back. Mid-blend, the forward
+  legs would swing down through the floor, so the whole baby lifts by exactly that much. Once
+  fully crawling the lift is zero.
+- **Pace:** a crawling baby's, 0.3× the walking pace (0.87 units/s at normal pace, about 2.4
+  crawl cycles a second).
+
+Measured with `scripts/gait-probe.mjs`, which now follows all four contacts: planted slip 0%,
+two or more contacts always down, nothing below the floor. `src/gait.test.ts` adds:
+- planted hands and knees never move or leave the floor;
+- no blend amount pushes a limb through the floor;
+- a sitting baby is exactly the authored pose.
+
