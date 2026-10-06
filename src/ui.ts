@@ -257,7 +257,7 @@ export function huntUI(l: Life) {
 // ---------------------------------------------------------------------------
 // panels
 // ---------------------------------------------------------------------------
-export function briefingUI(l: Life, first: boolean, b: BeatState, reopened: boolean) {
+export function briefingUI(l: Life, first: boolean, b: BeatState, reopened: boolean, run = false) {
   const ch = chapterOf(l);
   const last = b.index >= b.list.length - 1;
   const time = ch.free > 50 ? u("brief.noClock") : `${"☀".repeat(ch.free)} ${u("brief.freeHours", { n: ch.free })}`;
@@ -268,8 +268,15 @@ export function briefingUI(l: Life, first: boolean, b: BeatState, reopened: bool
    <div class="cine-text">${beatBlock(b, text(ch.intro, l))}${dots(b)}</div>
    <footer class="cine-foot">
     <div class="cine-goal"><span class="quest-mark" aria-hidden="true">!</span><strong>${esc(text(ch.objective, l))}</strong><span class="cine-time" title="${esc(u("brief.timeHelp"))}">${time}</span>${driftUI(l)}</div>
-    <div class="cine-actions">${last ? btn("close", reopened ? u("brief.back") : u("brief.begin"), "primary big") : `${btn("close", u("brief.skip"), "ghost")}${btn("beat", u("brief.continue"), "primary big")}`}</div>
+    <div class="cine-actions">${
+      last
+        ? run
+          ? `${btn("close", u("brief.explore"), "ghost")}${btn("run", u("brief.run"), "primary big run-btn", `title="${esc(u("brief.runHelp"))}"`)}`
+          : btn("close", reopened ? u("brief.back") : u("brief.begin"), "primary big")
+        : `${btn("close", u("brief.skip"), "ghost")}${btn("beat", u("brief.continue"), "primary big")}`
+    }</div>
    </footer>
+   ${run && last ? `<p class="run-hint">${esc(u("brief.runHelp"))}</p>` : ""}
    ${first && last ? `<ul class="tips" aria-label="${esc(u("brief.tipsLabel"))}"><li>${u("brief.tip1")}</li><li>${u("brief.tip2")}</li><li>${u("brief.tip3")}</li><li>${u("brief.tip4")}</li></ul>` : ""}
   </div>`;
 }
@@ -506,4 +513,50 @@ export function albumUI(a: Album) {
            .join("")}</ol>${btn("album-clear", u("album.clear"), "ghost small")}`
        : `<p>${u("album.empty")}</p>`
    }</section></div>`;
+}
+
+// ---------------------------------------------------------------------------
+// the Life Run (docs/LIFE_RUN_PLAN.md)
+// ---------------------------------------------------------------------------
+export type RunHud = {
+  phase: string;
+  coins: number;
+  sparks: number;
+  hearts: number;
+  stumbles: number;
+  gate: number;
+  touch: boolean;
+  gates: { index: number; label: string; open: boolean; why?: string }[];
+  /** The card slides in once, not on every gate change. */
+  enter?: boolean;
+};
+
+/** The run's HUD: what you carry, the way to the crossroads, and at the end, the question. */
+export function runUI(l: Life, h: RunHud) {
+  const ch = chapterOf(l);
+  const main = mainMoment(l);
+  const counts = `<div class="run-counts">
+    <span class="rc coin" aria-label="${esc(u("run.coins"))}"><i aria-hidden="true">●</i><b id="run-coins">${h.coins}</b></span>
+    <span class="rc spark" aria-label="${esc(u("run.sparks"))}"><i aria-hidden="true">✦</i><b id="run-sparks">${h.sparks}</b></span>
+    <span class="rc heart" aria-label="${esc(u("run.hearts"))}"><i aria-hidden="true">♥</i><b id="run-hearts">${h.hearts}</b></span></div>`;
+  const pips = `<span class="run-pips" id="run-pips" aria-label="${esc(u("run.stumbles"))}: ${h.stumbles}">${[0, 1, 2].map((i) => `<i class="${i < h.stumbles ? "used" : ""}"></i>`).join("")}</span>`;
+  const top = `<header class="run-top">${counts}
+    <div class="run-way"><span class="kicker">${esc(u("run.toward"))} · ${esc(ch.title)}</span><div class="run-bar"><span id="run-bar"></span></div></div>
+    ${pips}${btn("pause", u("run.pause"), "run-pause")}</header>`;
+  const callout = `<div class="run-callout" id="run-callout" role="status" aria-live="polite"></div>`;
+  if (h.phase !== "crossroads") return `<div class="run-hud" data-phase="${h.phase}">${top}${callout}<p class="run-help">${esc(h.touch ? u("run.swipe") : u("run.keys"))}</p></div>`;
+  const cards = h.gates
+    .map((g, i) => {
+      const o = main.options[g.index];
+      return `<button type="button" class="gate-card${i === h.gate ? " current" : ""}${g.open ? "" : " shut"}" data-action="gate" data-gate="${i}" aria-pressed="${i === h.gate}" ${g.open ? "" : 'aria-disabled="true"'}>
+        <strong>${esc(g.label)}</strong><small>${esc(text(o.hint, l))}</small>${g.open ? `<span class="chips">${chips(effectOf(l, o), l)}</span>` : `<em class="lock">🔒 ${esc(g.why ?? "")}</em>`}</button>`;
+    })
+    .join("");
+  return `<div class="run-hud" data-phase="crossroads">${top}${callout}
+    <section class="crossroads${h.enter ? " enter" : ""}" role="dialog" aria-modal="false" aria-labelledby="cross-title">
+     <header>${portrait(main.who, l)}<div><span class="kicker main">${esc(u("run.crossroads"))}</span><h2 id="cross-title" tabindex="-1">${esc(text(main.title, l))}</h2></div></header>
+     <p class="prompt">${esc(text(main.prompt, l))}</p>
+     <div class="gate-cards n${h.gates.length}">${cards}</div>
+     <footer><small>${esc(h.touch ? u("run.chooseTouch") : u("run.choose"))}</small>${btn("run-go", `${esc(u("run.through"))} ▸`, "primary big", h.gates[h.gate]?.open ? "" : "disabled")}</footer>
+    </section></div>`;
 }

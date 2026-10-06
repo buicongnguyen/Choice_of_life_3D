@@ -22,35 +22,6 @@ export const navigation = {
 } as const;
 export const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.z - b.z);
 
-/**
- * Lane-stepping (see docs/SUBWAY_LANES_PLAN.md): a small number of parallel tracks laid out
- * along the camera's screen-right axis, so A/D or ←/→ always reads as "left/right on screen"
- * under the fixed isometric camera, whichever way a diorama happens to be modelled. The scalar
- * is the player's position projected onto that axis (world.ts owns the actual 3D RIGHT vector;
- * this module only knows the 1D lane coordinates, so it's plain and testable).
- */
-export const LANE_COUNT = 5;
-export const LANE_SPACING = 1.65;
-export const LANES: number[] = Array.from({ length: LANE_COUNT }, (_, i) => (i - (LANE_COUNT - 1) / 2) * LANE_SPACING);
-export const LANE_MID = (LANE_COUNT - 1) / 2;
-
-/** The lane whose scalar coordinate is closest to a given position along the lane axis. */
-export function laneIndexNear(scalar: number): number {
-  let best = 0,
-    bestDist = Infinity;
-  LANES.forEach((lane, i) => {
-    const d = Math.abs(lane - scalar);
-    if (d < bestDist) {
-      bestDist = d;
-      best = i;
-    }
-  });
-  return best;
-}
-
-/** Clamp a lane step so it never walks off the ends of the track. */
-export const clampLane = (i: number) => Math.min(LANE_COUNT - 1, Math.max(0, i));
-
 /** Colliders active for a scene variant (untagged colliders always apply). */
 export const activeColliders = (layout: SceneLayout, variant?: string) =>
   layout.colliders.filter((c) => !c.variant || c.variant === variant);

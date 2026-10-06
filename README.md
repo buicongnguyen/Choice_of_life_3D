@@ -6,11 +6,24 @@ choice you make decides who is still holding the string with you at the end.
 
 - [Play the game](https://buicongnguyen.github.io/Choice_of_life_3D/)
 - [Inspect every model](https://buicongnguyen.github.io/Choice_of_life_3D/asset-gallery.html)
-- [Why and how the game was redesigned (1.0 → 1.3)](docs/KITEHAVEN_REDESIGN.md)
+- [Why and how the game was redesigned (1.0 → 2.0)](docs/KITEHAVEN_REDESIGN.md)
+- [The Life Run: Subway Surfers' mechanics, our story](docs/LIFE_RUN_PLAN.md)
 - Play in English, **Tiếng Việt** or **한국어** (title screen → Make it yours → Language)
 - [Art direction and the Blender pipeline](art/ART_DIRECTION.md)
 
 ## The game
+- **Every chapter is a run.** As in Subway Surfers, the camera sits behind you and you run up
+  the screen through Kitehaven: the cobbled lanes, the harbour pier, the garden paths. Switch
+  between three lanes, jump fences, slide under festival banners and dodge kite crates and
+  market carts. Coins, sparks and hearts become your savings, joy and health. Grab a kite to
+  fly over the street for a few seconds, and high-five the people you love as you pass them.
+  A stumble costs a little health, but a run never fails: this is a life, not an escape.
+- **The big choice is a crossroads.** Each run ends in a plaza with one gate per option, each
+  signed with its words. You run through the one you choose. Shut gates tell you what you'd
+  need first.
+- **Then the town is yours to explore.** After the run you arrive in the chapter's diorama to
+  meet people, find things and take on the chapter's activity. You can also skip the run and
+  explore on foot from the chapter card.
 - **Twelve chapters, twelve places:** the attic nursery, the gap in the garden fence, the
   schoolyard, the kite festival, the storm, the last train, your first job, a rooftop party,
   the busy kitchen, the town vote, Nana's cottage, and the last festival.
@@ -37,14 +50,14 @@ choice you make decides who is still holding the string with you at the end.
   and 3D toy icons rendered in Blender (`art/ui`).
 
 ## Controls
-**W/S** or the up/down arrows walk; **A/D** or the left/right arrows step sideways one lane at
-a time (a quick dodge, not a held strafe — see [Lane-stepping](docs/SUBWAY_LANES_PLAN.md)), or
-tap or click the ground to walk there instead. On touch screens, the thumb stick's forward
-axis is held and its left/right is a flick past the deadzone, the same one-step-per-gesture
-feel. **E** or **Space** to talk or act. In conversations, **click, Space or Enter** shows the
-next line and **1–5** chooses; **J** for the journal, **Esc** to pause. **Go to…** walks you to
-anyone or anything automatically. The kite game: hold to pull the line in, release to let it
-out. It has a "Steady hands" assist and a skip.
+**On a run:** ←/→ or A/D change lane (one press, one lane), ↑/W/Space jump, ↓/S slide. On a
+touch screen, swipe. At the crossroads, ←/→ chooses a gate and ↑ or Enter runs through it; you
+can also tap a gate's card, or press 1–5.
+
+**Exploring:** WASD or the arrow keys to walk, or tap or click the ground (on touch screens, drag the thumb stick). **E** or **Space** to talk or act.
+In conversations, **click, Space or Enter** shows the next line and **1–5** chooses; **J** for the journal, **Esc** to pause. **Go to…** walks you to anyone or
+anything automatically. On touch screens, use the pad or tap to walk. The kite game: hold to
+pull the line in, release to let it out. It has a "Steady hands" assist and a skip.
 
 Make it yours: name, hairstyle, skin tone and favourite colour. Graphics: Full detail, or
 Light for phones (the default on phones). Language: English, Tiếng Việt or 한국어 (it follows

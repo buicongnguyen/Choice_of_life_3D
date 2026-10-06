@@ -1,0 +1,400 @@
+/* The Life Run HUD (docs/LIFE_RUN_PLAN.md): corners only, the street stays clear. */
+body[data-panel="run"] .screen {
+  display: none;
+}
+.run-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: var(--ink);
+}
+.run-top {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  left: var(--pad);
+  right: var(--pad);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.run-counts {
+  display: flex;
+  gap: 8px;
+}
+.rc {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 64px;
+  padding: 6px 12px 6px 8px;
+  border: var(--edge);
+  border-radius: 999px;
+  background: var(--paper);
+  box-shadow: 0 3px 0 var(--ink);
+  font-weight: 800;
+  font-size: 1.05em;
+  font-variant-numeric: tabular-nums;
+}
+.rc i {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-style: normal;
+  font-size: 15px;
+  color: #fff;
+  border: 2px solid var(--ink);
+}
+.rc.coin i {
+  background: var(--sun);
+  color: #b36b00;
+}
+.rc.spark i {
+  background: #fff07a;
+  color: #c48a00;
+}
+.rc.heart i {
+  background: var(--pink);
+}
+.rc.bump {
+  animation: rc-bump 0.28s ease-out;
+}
+@keyframes rc-bump {
+  40% {
+    transform: scale(1.18);
+  }
+}
+.run-way {
+  flex: 1;
+  min-width: 0;
+  max-width: 420px;
+  margin: 0 auto;
+  text-align: center;
+}
+.run-way .kicker {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 800;
+  font-size: 0.78em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--paper);
+  text-shadow: 0 2px 0 rgba(29, 35, 64, 0.6);
+}
+.run-bar {
+  height: 12px;
+  margin-top: 4px;
+  border: var(--edge);
+  border-radius: 999px;
+  background: rgba(255, 250, 240, 0.85);
+  overflow: hidden;
+}
+.run-bar span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: linear-gradient(90deg, var(--sun), var(--coral));
+}
+.run-pips {
+  display: flex;
+  gap: 4px;
+}
+.run-pips i {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: var(--health);
+}
+.run-pips i.used {
+  background: transparent;
+  opacity: 0.5;
+}
+.run-pause {
+  pointer-events: auto;
+  flex: none;
+  padding: 0 18px;
+  min-width: var(--tap);
+  min-height: var(--tap);
+  border: var(--edge);
+  border-radius: 999px;
+  background: var(--paper);
+  box-shadow: 0 3px 0 var(--ink);
+  font-weight: 800;
+}
+.run-help {
+  position: absolute;
+  left: 50%;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(29, 35, 64, 0.72);
+  color: var(--paper);
+  font-weight: 700;
+  font-size: 0.9em;
+  white-space: nowrap;
+  animation: run-help-fade 6s ease-in forwards;
+}
+@keyframes run-help-fade {
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.run-callout {
+  position: absolute;
+  top: 26%;
+  left: 50%;
+  transform: translate(-50%, 0) scale(0.6);
+  opacity: 0;
+  padding: 10px 22px;
+  border: var(--edge);
+  border-radius: 999px;
+  background: var(--sun);
+  box-shadow: var(--lift);
+  font-family: var(--display);
+  font-size: 1.5em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.run-callout[data-kind="hit"] {
+  background: var(--coral);
+  color: #fff;
+}
+.run-callout[data-kind="friend"] {
+  background: var(--teal);
+}
+.run-callout[data-kind="kite"] {
+  background: #7fd6ff;
+}
+.run-callout.show {
+  animation: run-callout 1.4s ease-out forwards;
+}
+@keyframes run-callout {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 10px) scale(0.6);
+  }
+  14% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1.06);
+  }
+  24% {
+    transform: translate(-50%, 0) scale(1);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -16px) scale(1);
+  }
+}
+
+/* the crossroads: the chapter's question over the gates */
+.crossroads {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  left: 50%;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(880px, calc(100% - 2 * var(--pad)));
+  max-height: 52vh;
+  overflow: hidden;
+  padding: 16px 18px;
+  border: var(--edge);
+  border-radius: var(--sheet-radius);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+.crossroads.enter {
+  animation: cross-in 0.4s ease-out;
+}
+@keyframes cross-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 30px);
+  }
+}
+.crossroads > header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.crossroads h2 {
+  margin: 2px 0 0;
+  font-family: var(--display);
+  font-size: 1.45em;
+  line-height: 1.1;
+}
+.crossroads .prompt {
+  margin: 8px 0 12px;
+  color: var(--ink-2);
+  line-height: 1.45;
+}
+.gate-cards {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr));
+  gap: 10px;
+}
+.gate-cards.n2 {
+  --cols: 2;
+}
+.gate-cards.n4 {
+  --cols: 4;
+}
+.gate-cards.n5 {
+  --cols: 5;
+}
+.gate-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 92px;
+  padding: 10px 12px;
+  border: var(--edge);
+  border-radius: 18px;
+  background: var(--cream);
+  box-shadow: 0 3px 0 var(--ink);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.gate-card strong {
+  font-size: 1.02em;
+  line-height: 1.2;
+}
+.gate-card small {
+  color: var(--ink-soft);
+  line-height: 1.3;
+}
+.gate-card.current {
+  background: var(--sun-2);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 0 var(--ink);
+}
+.gate-card.shut {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+.gate-card .lock {
+  font-size: 0.85em;
+}
+.crossroads footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+.crossroads footer small {
+  color: var(--ink-soft);
+  font-weight: 700;
+}
+.cine-actions .run-btn {
+  min-width: 180px;
+}
+.run-hint {
+  max-width: 640px;
+  margin: 10px auto 0;
+  color: var(--paper);
+  font-weight: 700;
+  text-align: center;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.4);
+}
+
+@media (max-width: 700px) {
+  .run-top {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .run-counts {
+    gap: 5px;
+  }
+  .run-pips {
+    margin-left: auto;
+  }
+  .run-pause {
+    min-height: 40px;
+    padding: 0 12px;
+    font-size: 0.9em;
+  }
+  .crossroads h2 {
+    font-size: 1.2em;
+  }
+  .crossroads .prompt {
+    flex: none;
+    max-height: 20vh;
+    overflow: auto;
+    margin: 6px 0 8px;
+    font-size: 0.92em;
+  }
+  .gate-card small {
+    display: none;
+  }
+  .gate-card {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    padding: 8px 12px;
+  }
+  .run-way {
+    order: 3;
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .rc {
+    min-width: 0;
+    padding: 3px 9px 3px 5px;
+    font-size: 0.95em;
+  }
+  .rc i {
+    width: 22px;
+    height: 22px;
+  }
+  .run-help {
+    white-space: normal;
+    width: max-content;
+    max-width: calc(100% - 2 * var(--pad));
+    text-align: center;
+  }
+  .gate-cards,
+  .gate-cards.n4,
+  .gate-cards.n5 {
+    --cols: 1;
+  }
+  .gate-card {
+    min-height: 0;
+  }
+  .crossroads {
+    max-height: 62vh;
+    padding: 12px 14px;
+  }
+  .crossroads footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .run-callout.show,
+  .rc.bump,
+  .crossroads {
+    animation: none;
+  }
+  .run-callout.show {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}

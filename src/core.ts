@@ -3,7 +3,7 @@
  * so a save can only ever contain states the game itself could have produced.
  *
  * Actions: talk:<moment>:<option> · find:<i> · meet:<who> · start · hunt:<i>
- *          plan:<block> · unplan · commit · kite:<grade> · next
+ *          plan:<block> · unplan · commit · kite:<grade> · run:<c>-<s>-<h>-<st>:<who,…> · next
  */
 import {
   chapters,
@@ -21,6 +21,7 @@ import {
   type Option,
   type Stat,
 } from "./content";
+import { u } from "./i18n";
 
 export const SAVE_KEY = "choice-of-life-kitehaven-v1";
 export const LEGACY_SAVE_KEY = "choice-of-life-3d-v1";
@@ -305,6 +306,43 @@ function activityStep(l: Life, verb: string, arg: string): Life | null {
   return null;
 }
 
+/** The Life Run's haul (docs/LIFE_RUN_PLAN.md §4): bounded, so a hand-made save can't mint stats. */
+export function runEffect(coins: number, sparks: number, hearts: number, stumbles: number): Effect {
+  const e: Effect = {};
+  const savings = Math.min(8, Math.floor(coins / 5)),
+    joy = Math.min(6, Math.floor(sparks / 3)),
+    health = Math.max(-4, Math.min(4, 2 * hearts - 2 * stumbles));
+  if (savings) e.savings = savings;
+  if (joy) e.joy = joy;
+  if (health) e.health = health;
+  return e;
+}
+/** A run is the way into a chapter's big choice: once per chapter, before it's made. */
+export const canRun = (l: Life) => !l.complete && !mainDone(l) && !l.facts[`run${l.chapter}`];
+
+function run(l: Life, counts: string, who: string): Life | null {
+  const m = /^(\d{1,3})-(\d{1,3})-(\d{1,2})-([0-3])$/.exec(counts);
+  if (!m || !canRun(l)) return null;
+  const [coins, sparks, hearts, stumbles] = m.slice(1).map(Number);
+  if (coins > 400 || sparks > 200 || hearts > 10) return null;
+  const friends = who ? who.split(",") : [];
+  const cast = castOf(l).map(([w]) => w);
+  if (friends.length > 2 || new Set(friends).size !== friends.length || friends.some((f) => !cast.includes(f))) return null;
+  const s = structuredClone(l);
+  s.facts[`run${s.chapter}`] = "1";
+  const effect = runEffect(coins, sparks, hearts, stumbles);
+  const actual = applyEffect(s, effect);
+  // a high-five on the street is time with someone, so that bond doesn't cool this chapter
+  const tended = tendedBy(effect);
+  for (const f of friends) {
+    const b = bondOf(f, s);
+    if (b && !tended.includes(b)) tended.push(b);
+  }
+  const line = u("run.memory", { coins, sparks, hearts });
+  s.memories.push({ id: `r:${s.chapter}`, chapter: s.chapter, title: u("run.memoryTitle"), text: line, detail: line, effect: actual, tended });
+  return s;
+}
+
 function next(l: Life): Life | null {
   if (!canLeave(l)) return null;
   const s = structuredClone(l);
@@ -331,6 +369,7 @@ export function act(l: Life, action: string): Life {
   else if (verb === "find") s = /^[0-2]$/.test(a) ? find(l, Number(a)) : null;
   else if (verb === "meet") s = meet(l, a);
   else if (verb === "next") s = next(l);
+  else if (verb === "run") s = run(l, a, b);
   else if (["start", "hunt", "plan", "unplan", "commit", "kite"].includes(verb)) s = activityStep(l, verb, a);
   if (!s) return l;
   if (verb === "unplan") {

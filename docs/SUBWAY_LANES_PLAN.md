@@ -1,5 +1,7 @@
 # Adapting Subway Surfers' left/right lanes to Kitehaven
 
+> **Superseded in 2.0** by [LIFE_RUN_PLAN.md](LIFE_RUN_PLAN.md). This 1.4 version kept the isometric camera; 2.0 builds the real thing, a chase camera running up the screen, and removes these diorama lanes.
+
 ## 1. What Subway Surfers actually does (research)
 
 - **Auto-run forward** on a fixed 3-lane track; the player never controls forward speed.

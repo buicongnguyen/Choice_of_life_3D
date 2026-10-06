@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import kitehaven.kit as kit  # noqa: E402
-from kitehaven import scenes, characters  # noqa: E402
+from kitehaven import scenes, characters, runner  # noqa: E402
 
 args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 only = set()
@@ -95,7 +95,7 @@ def run(low):
             layout[name] = dict(colliders=m.colliders, anchors=m.anchors, **m.extra)
         report[name] = m.export()
         print(f"  {name} {'low' if low else 'full'} {time.time() - t:.1f}s", flush=True)
-    for name, fn in (("harbour", scenes.harbour), ("props", scenes.props)):
+    for name, fn in (("harbour", scenes.harbour), ("props", scenes.props), ("runner", runner.runner)):
         if only and name not in only:
             continue
         m = fn()

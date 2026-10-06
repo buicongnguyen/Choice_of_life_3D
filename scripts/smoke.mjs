@@ -461,35 +461,55 @@ for (const [code, pattern, chapterTitle] of [
 }
 
 // ---------------------------------------------------------------------------
-// 6. Kitehaven 1.4: lane-stepping (docs/SUBWAY_LANES_PLAN.md)
+// 6. Kitehaven 2.0: the Life Run (docs/LIFE_RUN_PLAN.md)
 // ---------------------------------------------------------------------------
 {
   const page = await open({ save: lifeTo(3) });
-  await continueSaved(page);
-  const lane = () => page.evaluate(() => window.lifeDiagnostics.render.lane);
-  const before = await lane();
-  // a swipe is one gesture: holding the key must step exactly once, not repeat
-  await page.keyboard.down("d");
-  await page.waitForTimeout(900);
-  const afterHold = await lane();
-  await page.keyboard.up("d");
-  assert.equal(afterHold, before + 1, `one held "d" press steps exactly one lane (${before} → ${afterHold})`);
-  // and a tap back returns it, with no residual repeat
-  await page.waitForTimeout(150);
-  await page.keyboard.press("a");
+  await page.locator('[data-action="continue"]').click();
+  await ready(page);
+  await panel(page, "briefing");
+  for (let i = 0; i < 10 && !(await page.locator('[data-action="run"]').count()); i++) await page.locator('.cinema [data-action="beat"]').first().click();
+  assert.ok(await page.locator('.cinema [data-action="close"]').count(), "exploring on foot stays on offer");
+  await page.locator('[data-action="run"]').click();
+  await page.waitForFunction(() => window.lifeDiagnostics.render.run && !window.lifeDiagnostics.loading, null, { timeout: 60000 });
+  const run = async () => (await diag(page)).render.run;
+  await page.waitForTimeout(600);
+  const d0 = (await run()).d;
+  await page.keyboard.press("ArrowLeft");
+  await page.waitForTimeout(300);
+  assert.equal((await run()).lane, 0, "one press, one lane");
+  await page.keyboard.press("ArrowUp");
+  await page.waitForTimeout(200);
+  assert.ok((await run()).y > 0.5, "jump");
+  await page.waitForTimeout(700);
+  await page.keyboard.press("ArrowDown");
+  await page.waitForTimeout(100);
+  assert.ok((await run()).sliding, "slide");
+  assert.ok((await run()).d > d0 + 5, "the run moves you up the street on its own");
+  // pause holds the run; resuming returns to it
+  await page.keyboard.press("Escape");
+  await panel(page, "pause");
+  const held = (await run()).d;
   await page.waitForTimeout(500);
-  assert.equal(await lane(), before, "a tap of the opposite key steps back");
-  // forward/back is untouched: held "w" still covers real, continuous distance
-  const pos0 = (await diag(page)).render.position;
-  await page.keyboard.down("w");
-  await page.waitForTimeout(900);
-  await page.keyboard.up("w");
-  const pos1 = (await diag(page)).render.position;
-  assert.ok(Math.hypot(pos1.x - pos0.x, pos1.z - pos0.z) > 0.8, "holding w still walks forward continuously");
-  // tap-to-walk (pathfinding) still reaches an NPC exactly, unfought by the lane tween
-  await travel(page, "person:rowan");
-  await panel(page, "moment");
-  check("lane-stepping: A/D step one lane per gesture, W/S stays continuous, tap-to-walk still works");
+  assert.equal((await run()).d, held, "paused");
+  await page.keyboard.press("Escape");
+  await panel(page, "run");
+  await page.waitForFunction(() => window.lifeDiagnostics.render.run?.phase === "crossroads", null, { timeout: 90000 });
+  await page.screenshot({ path: "docs/captures/smoke-crossroads.png" });
+  const n = await page.locator(".gate-card").count();
+  assert.equal(n, (await run()).gates, "one card per gate");
+  const open1 = await page.locator(".gate-card:not(.shut)").last().getAttribute("data-gate");
+  await page.locator(`.gate-card[data-gate="${open1}"]`).click();
+  await page.locator('[data-action="run-go"]').click();
+  await panel(page, "response");
+  await ready(page);
+  const s = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)), core.SAVE_KEY);
+  assert.match(s.log.at(-2), /^run:\d+-\d+-\d+-[0-3]:/, "the run is logged");
+  assert.match(s.log.at(-1), /^talk:c4\.race:\d$/, "then the choice made at the gate");
+  assert.equal((await diag(page)).render.run, null, "back in the diorama");
+  await closePanel(page);
+  assert.ok((await diag(page)).render.points.includes("exit"), "the golden gate is open");
+  check("the Life Run: lanes, jump, slide, pause, the crossroads gates, then the diorama with the choice made");
   await page.close();
 }
 

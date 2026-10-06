@@ -142,9 +142,7 @@ for (const [label, chapter, pace] of [
   await page.waitForTimeout(2200); // the camera's opening sweep
   await page.evaluate(() => window.lifeDiagnostics.render.gait); // discard
   const trace = [];
-  // forward/back only: left/right is now a discrete lane-step (docs/SUBWAY_LANES_PLAN.md),
-  // not something a held key can run a continuous gait-measuring distance with.
-  for (const key of ["w", "s"]) {
+  for (const key of ["d", "a"]) {
     await page.keyboard.down(key);
     await page.waitForTimeout(1600);
     const part = await page.evaluate(() => window.lifeDiagnostics.render.gait);

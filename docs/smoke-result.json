@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-06T06:11:00.277Z",
+  "at": "2026-10-06T07:06:09.893Z",
   "base": "http://127.0.0.1:4263/",
   "checks": [
     "title: settings switches, and the customise sheet",
@@ -21,7 +21,7 @@
     "fireworks, the ending, the picture card and the album of lives",
     "Vietnamese: title, chapter card, choices and journal translated; switching language keeps the life",
     "Korean: title, chapter card, choices and journal translated; switching language keeps the life",
-    "lane-stepping: A/D step one lane per gesture, W/S stays continuous, tap-to-walk still works"
+    "the Life Run: lanes, jump, slide, pause, the crossroads gates, then the diorama with the choice made"
   ],
   "errors": []
 }

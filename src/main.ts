@@ -2,7 +2,9 @@ import "./style.css";
 import "./conversation.css";
 import "./features.css";
 import "./design.css";
-import { World, type Place } from "./world";
+import "./runner.css";
+import { World, playerLook, type Place } from "./world";
+import { planRun, bodyOf, runAction, type RunEvent, type Theme } from "./runner-core";
 import { graphicsQuality, type GraphicsQuality } from "./graphics";
 import { KiteGame } from "./kite-game";
 import { reloadAfterSaving } from "./persistence";
@@ -13,7 +15,12 @@ import {
   SAVE_KEY,
   LEGACY_SAVE_KEY,
   act,
+  bondOf,
   canLeave,
+  canRun,
+  castOf,
+  mainMoment,
+  optionOpen,
   canTalk,
   chapterOf,
   freeTime,
@@ -29,7 +36,7 @@ import {
   type Identity,
   type Life,
 } from "./core";
-import { activityUI, albumUI, briefingUI, customiseUI, endingUI, esc, settingsUI, exploreUI, huntUI, journalUI, momentUI, pauseUI, playUI, responseUI, restartUI, titleUI, chips, statInfo, bondName, type BeatState } from "./ui";
+import { runUI, activityUI, albumUI, briefingUI, customiseUI, endingUI, esc, settingsUI, exploreUI, huntUI, journalUI, momentUI, pauseUI, playUI, responseUI, restartUI, titleUI, chips, statInfo, bondName, type BeatState } from "./ui";
 import { beats, wordCount } from "./beats";
 import { askingMood, replyMood } from "./moods";
 import { cue, blip, voicePitch, setAmbience, setEnabled, stopAmbience, setMusic, setMusicOn } from "./audio";
@@ -43,7 +50,7 @@ import type { Effect } from "./content";
 const ui = document.querySelector<HTMLElement>("#ui")!;
 const host = document.querySelector<HTMLElement>("#world")!;
 const announcer = document.querySelector<HTMLElement>("#announcer")!;
-type Panel = "none" | "moment" | "response" | "activity" | "briefing" | "explore" | "journal" | "pause" | "restart" | "album" | "customise" | "settings";
+type Panel = "none" | "run" | "moment" | "response" | "activity" | "briefing" | "explore" | "journal" | "pause" | "restart" | "album" | "customise" | "settings";
 
 // ---------------------------------------------------------------------------
 // language first: saves replay their story text, so the words must be in place before
@@ -238,7 +245,8 @@ function panelUI() {
   if (panel === "moment" && activeMoment) return momentUI(state, activeMoment, beat);
   if (panel === "response") return responseUI(response.title, beat, response.text, response.effect, state, response.note, response.who);
   if (panel === "activity") return activityUI(state, { active: !!kite, assist: kiteAssist });
-  if (panel === "briefing") return briefingUI(state, firstBriefing && state.chapter === 0, beat, briefingReopened);
+  if (panel === "briefing") return briefingUI(state, firstBriefing && state.chapter === 0, beat, briefingReopened, !briefingReopened && canRun(state));
+  if (panel === "run") return runHudUI();
   if (panel === "explore") return exploreUI(world.places(), chapterOf(state).free > 50);
   if (panel === "journal") return journalUI(state, journalTab, album, kiteHint);
   if (panel === "pause") return pauseUI({ storage: storageIssue, touch: touchUI });
@@ -250,6 +258,9 @@ function panelUI() {
 }
 
 function render(focus = false) {
+  // a run fills the screen; closing a panel over it (pause, settings) returns to it
+  if (panel === "none" && world.running && mode === "play") panel = "run";
+  world.runPaused = panel !== "run" || loading;
   const focusedAction = (document.activeElement as HTMLElement | null)?.dataset?.action;
   const focusedValue = (document.activeElement as HTMLElement | null)?.dataset?.value;
   const opening = panel !== "none" && renderedPanel === "none";
@@ -647,6 +658,164 @@ function choose(index: number) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// the Life Run (docs/LIFE_RUN_PLAN.md)
+// ---------------------------------------------------------------------------
+const RUN_KEYS: Record<string, "left" | "right" | "jump" | "slide" | "go"> = {
+  ArrowLeft: "left",
+  a: "left",
+  ArrowRight: "right",
+  d: "right",
+  ArrowUp: "jump",
+  w: "jump",
+  " ": "jump",
+  ArrowDown: "slide",
+  s: "slide",
+  Enter: "go",
+};
+const THEMES: Record<string, Theme> = { pier: "pier", storm: "pier", nursery: "garden", gardens: "garden", cottage: "garden", clifftop: "garden" };
+let runFrame = 0;
+let crossEnter = false;
+const runPhase = () => world.diagnostics().run?.phase ?? "";
+const runGates = () =>
+  visibleOptions(state, mainMoment(state)).map(([o, i]) => ({ index: i, label: text(o.label, state), open: optionOpen(state, o), why: o.need?.why }));
+
+function runHudUI() {
+  const r = world.diagnostics().run;
+  return runUI(state, { phase: r?.phase ?? "run", coins: r?.coins ?? 0, sparks: r?.sparks ?? 0, hearts: r?.hearts ?? 0, stumbles: r?.stumbles ?? 0, gate: r?.gate ?? 0, touch: touchUI, gates: runGates(), enter: crossEnter });
+}
+
+async function startRun() {
+  if (!canRun(state) || busy || world.running) return;
+  const ch = chapterOf(state);
+  // the people you love are out on the street: run past them for a high-five
+  const friends = castOf(state)
+    .map(([w]) => w)
+    .filter((w) => bondOf(w, state))
+    .slice(0, 2);
+  const body = bodyOf(playerLook(state.identity, state.chapter, state).kind);
+  const plan = planRun({
+    seed: state.chapter * 7919 + state.log.length * 31 + 7,
+    theme: THEMES[ch.scene] ?? "town",
+    body,
+    level: state.chapter < 3 ? 0 : state.chapter < 7 ? 1 : 2,
+    friends,
+    gates: runGates(),
+  });
+  firstBriefing = false;
+  loading = true;
+  panel = "run";
+  render();
+  try {
+    await world.startRun(state, plan, friends, onRun);
+  } catch (err) {
+    console.error(err);
+    loading = false;
+    panel = "none";
+    render(true);
+    return;
+  }
+  loading = false;
+  panel = "run";
+  render(true);
+  cue("chapter");
+  cancelAnimationFrame(runFrame);
+  const tick = () => {
+    const r = world.diagnostics().run;
+    if (!r) return;
+    const bar = ui.querySelector<HTMLElement>("#run-bar");
+    if (bar) bar.style.width = `${Math.min(100, (r.d / r.stop) * 100).toFixed(1)}%`;
+    runFrame = requestAnimationFrame(tick);
+  };
+  runFrame = requestAnimationFrame(tick);
+}
+
+let calloutTimer = 0;
+function callout(html: string, kind = "") {
+  const el = ui.querySelector<HTMLElement>("#run-callout");
+  if (!el) return;
+  el.innerHTML = html;
+  el.dataset.kind = kind;
+  el.classList.remove("show");
+  void el.offsetWidth;
+  el.classList.add("show");
+  clearTimeout(calloutTimer);
+  calloutTimer = window.setTimeout(() => el.classList.remove("show"), 1400);
+}
+
+function onRun(e: RunEvent) {
+  const r = world.diagnostics().run;
+  const set = (id: string, v: number) => {
+    const el = ui.querySelector(`#${id}`);
+    const chip = el?.parentElement;
+    if (!el || !chip) return;
+    el.textContent = String(v);
+    chip.classList.remove("bump");
+    void chip.offsetWidth;
+    chip.classList.add("bump");
+  };
+  if (e.type === "coin" && r) set("run-coins", r.coins);
+  if (e.type === "spark" && r) set("run-sparks", r.sparks);
+  if (e.type === "heart" && r) {
+    set("run-hearts", r.hearts);
+    cue("heart");
+  }
+  if (e.type === "kite") {
+    callout(esc(u("run.kite")), "kite");
+    cue("find");
+  }
+  if (e.type === "hit") {
+    callout(esc(u("run.stumble")), "hit");
+    ui.querySelectorAll("#run-pips i").forEach((i, k) => i.classList.toggle("used", k < e.stumbles));
+    cue("soft");
+  }
+  if (e.type === "winded") callout(esc(u("run.winded")), "hit");
+  if (e.type === "highfive") {
+    callout(esc(u("run.highfive", { name: personName(e.who, state) })), "friend");
+    cue("heart");
+  }
+  if (e.type === "crossroads") {
+    cue("choice");
+    crossEnter = true;
+    render(true);
+    crossEnter = false;
+  }
+  if (e.type === "lane" && r?.phase === "crossroads") render();
+  if (e.type === "shut") {
+    const g = runGates()[e.gate];
+    callout(esc(u("run.shut", { why: g?.why ?? "" })), "hit");
+  }
+  if (e.type === "done") void finishRun(e.choice);
+}
+
+async function finishRun(choice: number) {
+  const result = world.runResult();
+  cancelAnimationFrame(runFrame);
+  world.endRun();
+  if (result) perform(runAction(result));
+  const haul = result ? state.memories.at(-1) : undefined;
+  panel = "none";
+  loading = true;
+  render();
+  try {
+    await world.show(state);
+  } catch (err) {
+    console.error(err);
+    loadError = u("cover.chapterError");
+  }
+  loading = false;
+  mode = "play";
+  const main = mainMoment(state);
+  activeMoment = main;
+  focusId = world.placeOf(resolveWho(main.who, state)) ?? null;
+  choose(choice);
+  if (haul?.id.startsWith("r:") && result) {
+    toast(`<b>${esc(haul.title)}</b> <span class="chips inline">${chips(haul.effect, state)}</span><br><small>${esc(u("run.haul", { coins: result.coins, sparks: result.sparks, hearts: result.hearts }))}</small>`, 4200);
+    popRewards(haul.effect);
+  }
+  ambience();
+}
+
 async function showChapter() {
   loading = true;
   loadError = "";
@@ -868,6 +1037,21 @@ ui.addEventListener("click", async (event) => {
     case "choose":
       choose(Number(target.dataset.index));
       break;
+    case "run":
+      void startRun();
+      break;
+    case "gate": {
+      // a tapped card: face that gate, and a second tap runs through it
+      const i = Number(target.dataset.gate);
+      const r = world.diagnostics().run;
+      if (!r || !Number.isInteger(i)) break;
+      if (i === r.gate) world.runInput("go", i);
+      else for (let k = 0; k < 6 && (world.diagnostics().run?.gate ?? i) !== i; k++) world.runInput(i < world.diagnostics().run!.gate ? "left" : "right");
+      break;
+    }
+    case "run-go":
+      world.runInput("go");
+      break;
     case "task-start":
       if (perform("start")) {
         const a = chapterOf(state).activity;
@@ -1069,7 +1253,7 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && mode === "play") {
     event.preventDefault();
     if (panel === "activity" && kite) return;
-    panel = panel === "none" ? "pause" : "none";
+    panel = panel === "none" || panel === "run" ? "pause" : "none";
     activeMoment = null;
     save();
     render(true);
@@ -1095,6 +1279,20 @@ window.addEventListener("keydown", (event) => {
     }
     return;
   }
+  if (panel === "run" && !loading) {
+    const k = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+    if (/^[1-5]$/.test(k) && runPhase() === "crossroads") {
+      event.preventDefault();
+      world.runInput("go", Number(k) - 1);
+      return;
+    }
+    const cmd = RUN_KEYS[k];
+    if (cmd && !event.repeat) {
+      event.preventDefault();
+      world.runInput(cmd);
+    }
+    return;
+  }
   if (mode !== "play" || panel !== "none" || loading) return;
   const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
   if (movement.has(key)) {
@@ -1116,7 +1314,7 @@ function suspend() {
   world.clearInput();
   kite?.pause();
   save();
-  if (mode === "play" && panel === "none" && !loading) {
+  if (mode === "play" && (panel === "none" || panel === "run") && !loading) {
     panel = "pause";
     render();
   }

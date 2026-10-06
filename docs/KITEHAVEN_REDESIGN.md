@@ -471,7 +471,7 @@ two or more contacts always down, nothing below the floor. `src/gait.test.ts` ad
 - no blend amount pushes a limb through the floor;
 - a sitting baby is exactly the authored pose.
 
-## 11. 1.4.0: lane-stepping, adapted from Subway Surfers
+## 11. 1.4.0: lane-stepping, adapted from Subway Surfers (superseded by 2.0, §12)
 
 The user asked for Subway Surfers' left/right movement, since "the game is difficult to
 observe." The full write-up — what was researched, what was kept, what was deliberately left
@@ -522,3 +522,72 @@ or a clicked destination is essentially never exactly on a lane line) with "the 
 actively steering," which silently broke tap-to-walk for the rest of the chapter the moment the
 error failed to reach zero (furniture, a blocked diagonal). Caught by the smoke suite's "walk to
 Nana June" check timing out; fixed with the `laneSettled` flag described above.
+
+## 12. 2.0.0: the Life Run
+
+The 1.4 lane-stepping put Subway Surfers' lanes on the isometric camera, which still looked
+across the diorama. The real request was the genre itself: **the camera behind you and the
+street running up the screen**. 2.0 builds that as the way into every chapter. The full plan
+is in [LIFE_RUN_PLAN.md](LIFE_RUN_PLAN.md). The 1.4 diorama lane-stepping and its floor guides
+are removed, so walking is free movement again.
+
+**What it borrows from the genre:**
+- auto-run on three lanes, with a quick tween and a lean;
+- jump and slide, each answering exactly one obstacle shape;
+- coin lines that teach the safe route;
+- a jetpack-style power-up, here the **kite lift**;
+- a stumble that forgives one mistake;
+- the chase camera, the corner HUD, pickup pops and a camera kick when you're hit.
+
+**What it changes for the story:**
+- **The run's haul is your life's stats.** Coins, sparks and hearts become savings, joy and
+  health. The run is logged as one action, `run:c-s-h-st:who`, with bounded effects, and is
+  written as a journal memory.
+- **People you love stand in the street.** A high-five counts as time with them, so the bond
+  doesn't cool.
+- **Nothing fails.** After three stumbles you're *winded*: the street clears and you jog in.
+- **The big choice is a crossroads of gates.** The plaza widens to one gate per option, and
+  shut options show a picket and the reason. The choice is logged as the usual `talk:` action,
+  so every story consequence is unchanged.
+- **Your age sets the run.** The baby crawls a short garden run with crates only. Elders get a
+  gentler pace and fewer kinds of obstacle. Difficulty grows with the chapter and the distance.
+
+**Assets:** `art/kitehaven/runner.py` → `runner.glb` (full and phone) holds:
+- three themed track tiles (town cobbles, pier planks, garden path) and the plaza;
+- four house colourways, trees, lamps, stalls, bunting and boats;
+- crates, a market cart, the hurdle and the banner;
+- coins, sparks, hearts and the kite;
+- the gate, its shut picket, and the town backdrop around the crossroads.
+
+Pickups get a little emissive at runtime so they read in shade, as genre pickups do.
+
+**Code:**
+
+| File | What it does |
+|---|---|
+| `src/runner-core.ts` | Pure, seeded plan and simulation |
+| `src/runner-view.ts` | Recycled street, items, friends, gates, chase camera |
+| `world.ts` | Hosts the view with the existing renderer, lights, characters and speed-true gait |
+| `main.ts` / `ui.ts` / `runner.css` | Run HUD and the crossroads card |
+| `core.ts` | The `run:` action |
+
+**Found while verifying:**
+1. **Baby runs could be walled off.** The baby's one-crate rows rolled the random lane once
+   per lane, so a row could fill all three lanes. Caught by the "every row leaves a way through"
+   test and fixed.
+2. **Hits on landing from the kite lift.** Coming down from the lift, you could land on a
+   hurdle row while still in the air and unable to jump. Caught by the "careful runner" test.
+   Fixed with a safe landing: clear rows after the lift, plus a second of protection.
+3. **The slide pose.** Squashing the runner read as a blob from behind. It's now a forward duck.
+4. **The phone crossroads.** The card hid the gates. The portrait camera now frames them above
+   the card, and the card's button stays pinned.
+
+**Verified:**
+- 57 unit tests, including 9 for the run (passable rows, determinism, a careful runner with no
+  stumbles, winded, jump/slide/clear rules, one press per lane, gates, high-fives, kite, and
+  the bounded `run:` action);
+- 20/20 browser smoke checks: the original 19 (exploring on foot is unchanged), plus a full run
+  through lanes, jump, slide, pause, the crossroads, the choice and the diorama;
+- swipes in Chromium and WebKit;
+- 60 fps in runs on desktop, high and low graphics (269–454 draw calls, the same range as the
+  dioramas).
