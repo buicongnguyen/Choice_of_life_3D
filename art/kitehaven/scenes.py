@@ -1287,6 +1287,17 @@ def props():
         m.box((0, 0.15, 0), (0.44, 0.28, 0.2), "ink", "Gloss", 0.05)
         m.cyl((0, 0.15, 0.1), 0.1, 0.1, "metal", "Metal", 16, 0.02, rot=(math.pi / 2, 0, 0))
         m.box((0.13, 0.31, 0), (0.1, 0.05, 0.12), "red", "Gloss", 0.02)
+    # Lane-stepping guides (docs/SUBWAY_LANES_PLAN.md): authored flat on the ground, pointing
+    # along local +x; world.ts rotates each instance to lie along a lane's own direction.
+    with prop("lane_track"):
+        n, dash, gap = 7, 0.6, 0.38
+        span = n * (dash + gap) - gap
+        for k in range(n):
+            x = -span / 2 + k * (dash + gap) + dash / 2
+            m.box((x, 0.012, 0), (dash, 0.012, 0.12), "ffd88a", "Glow_warm", 0.0, ao=False)
+    with prop("lane_marker"):
+        pts = [(-0.16, 0.14), (0.18, 0), (-0.16, -0.14), (-0.02, 0)]
+        m.extrude(pts, 0.012, 0.045, "ffc234", "Glow_warm", plane="xz", bevel=0.01, ao=False)
     return m
 
 

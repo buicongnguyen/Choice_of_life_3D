@@ -37,10 +37,14 @@ choice you make decides who is still holding the string with you at the end.
   and 3D toy icons rendered in Blender (`art/ui`).
 
 ## Controls
-WASD or the arrow keys to walk, or tap or click the ground (on touch screens, drag the thumb stick). **E** or **Space** to talk or act.
-In conversations, **click, Space or Enter** shows the next line and **1–5** chooses; **J** for the journal, **Esc** to pause. **Go to…** walks you to anyone or
-anything automatically. On touch screens, use the pad or tap to walk. The kite game: hold to
-pull the line in, release to let it out. It has a "Steady hands" assist and a skip.
+**W/S** or the up/down arrows walk; **A/D** or the left/right arrows step sideways one lane at
+a time (a quick dodge, not a held strafe — see [Lane-stepping](docs/SUBWAY_LANES_PLAN.md)), or
+tap or click the ground to walk there instead. On touch screens, the thumb stick's forward
+axis is held and its left/right is a flick past the deadzone, the same one-step-per-gesture
+feel. **E** or **Space** to talk or act. In conversations, **click, Space or Enter** shows the
+next line and **1–5** chooses; **J** for the journal, **Esc** to pause. **Go to…** walks you to
+anyone or anything automatically. The kite game: hold to pull the line in, release to let it
+out. It has a "Steady hands" assist and a skip.
 
 Make it yours: name, hairstyle, skin tone and favourite colour. Graphics: Full detail, or
 Light for phones (the default on phones). Language: English, Tiếng Việt or 한국어 (it follows

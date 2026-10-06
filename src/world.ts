@@ -20,7 +20,7 @@ import { buildKite, kiteLook, lookOf, type KiteLook } from "./kite-art";
 import { FIREWORKS, TOWN_TOPS, WALKERS, seasonOf, type Season } from "./town";
 import type { Mood } from "./moods";
 import { crawlCycle, crawlPose, cycleLength, gaitPose, gaitShape, type CrawlRig } from "./gait";
-import { activeColliders, clearSegment, findPath, free, recoverPosition, withinPickup, approach, navigation, type Collider, type SceneLayout } from "./navigation";
+import { activeColliders, clearSegment, findPath, free, recoverPosition, withinPickup, approach, navigation, LANES, LANE_COUNT, LANE_MID, clampLane, laneIndexNear, type Collider, type SceneLayout } from "./navigation";
 
 export type PlaceKind = "person" | "discovery" | "activity" | "hunt" | "exit";
 export type Place = { id: string; kind: PlaceKind; label: string; x: number; z: number; index: number; who?: string; status?: "main" | "side" | "guest" | "idle" };
@@ -87,6 +87,10 @@ const canvasFont = () => getComputedStyle(document.documentElement).getPropertyV
 /** The camera's right and "away" directions on the ground (the view direction never rotates). */
 const AWAY = new T.Vector3(-DIR.x, 0, -DIR.z).normalize();
 const RIGHT = new T.Vector3(-AWAY.z, 0, AWAY.x);
+/** Rotation.y that turns a prop authored lengthwise along local +x to point along AWAY (see docs/SUBWAY_LANES_PLAN.md). */
+const LANE_ANGLE = Math.atan2(-AWAY.z, AWAY.x);
+/** A position's coordinate along the lane axis (world.ts owns the 3D projection; navigation.ts owns the 1D lane maths). */
+const laneScalar = (x: number, z: number) => x * RIGHT.x + z * RIGHT.z;
 const STAT_COLOURS = { health: 0xff6a6a, joy: 0xffc234, savings: 0x2ed3b0 } as const;
 const RECOLOUR = ["Skin", "Hair", "Top", "Bottom", "Shoes", "Accent", "Kite"];
 /** Brow pose per mood: tilt (+ raises the inner ends) and lift (fraction of height). */
@@ -185,6 +189,16 @@ export class World {
   private generation = 0;
   private target: T.Vector3[] = [];
   private pending: string | null = null;
+  /** Lane-stepping (see docs/SUBWAY_LANES_PLAN.md): A/D or ←/→ step one lane at a time, like a swipe. */
+  private laneIndex = LANE_MID;
+  /** A brief sideways lean kicked off by a lane step, decaying back to upright. */
+  private laneLean = 0;
+  /** Hysteresis so a held stick doesn't re-fire a lane step every frame while it's over. */
+  private padLaneArmed = true;
+  /** False while a lane-step is still tweening the player onto its line; true once it's there
+   * (or the player hasn't stepped a lane at all), so idle tap-to-walk is never fought by a
+   * spawn position that simply isn't exactly on a lane line. */
+  private laneSettled = true;
   private raycaster = new T.Raycaster();
   private ground = new T.Plane(new T.Vector3(0, 1, 0), 0);
   private clock = 0;
@@ -499,6 +513,10 @@ export class World {
     this.playerPosition.set(p.x, 0, p.z);
     this.player.root.position.copy(this.playerPosition);
     this.player.root.rotation.y = spawn.facing ?? Math.PI;
+    this.player.root.rotation.z = 0;
+    this.laneIndex = laneIndexNear(laneScalar(this.playerPosition.x, this.playerPosition.z));
+    this.laneLean = 0;
+    this.laneSettled = true; // the spawn point itself is never treated as "off the lane"
     this.cast.add(this.player.root);
     const ring = new T.Mesh(new T.RingGeometry(0.36, 0.44, 40), new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, side: T.DoubleSide, depthWrite: false }));
     ring.material.userData.owned = true;
@@ -518,6 +536,7 @@ export class World {
       this.actors.push(actor);
     });
     this.buildPoints(props);
+    this.addLaneGuides(layout);
     this.addWalkers(state, chapter.scene, bodies);
     this.addWeather(chapter.env, seasonOf(state.chapter), !layout.interior);
     this.skyKite = undefined;
@@ -729,6 +748,37 @@ export class World {
     const obj = src ? this.clone(src) : new T.Group();
     obj.position.set(0, 0, 0);
     return obj;
+  }
+
+  /**
+   * Dashed floor guides for lane-stepping (docs/SUBWAY_LANES_PLAN.md): laid out along the
+   * screen-right axis so they read as straight parallel tracks under the fixed isometric
+   * camera. Smaller rooms get fewer, dimmer lanes so the guides don't crowd the furniture.
+   */
+  private addLaneGuides(layout: SceneLayout) {
+    const indoor = !!layout.interior;
+    const lanes = indoor ? [LANE_MID - 1, LANE_MID, LANE_MID + 1] : LANES.map((_, i) => i);
+    const scale = indoor ? 0.55 : 1;
+    for (const i of lanes) {
+      const scalar = LANES[i];
+      const x = scalar * RIGHT.x,
+        z = scalar * RIGHT.z;
+      const track = this.prop("lane_track");
+      track.position.set(x, 0, z);
+      track.rotation.y = LANE_ANGLE;
+      // Shrink the footprint only: scaling the glow's height too made it nearly invisible
+      // against the floor in small, similarly-coloured rooms (the nursery, especially).
+      track.scale.set(scale, 1, scale);
+      this.fx.add(track);
+      for (const sign of [-1, 1] as const) {
+        const along = (indoor ? 1.5 : 3.2) * sign;
+        const marker = this.prop("lane_marker");
+        marker.position.set(x + AWAY.x * along, 0, z + AWAY.z * along);
+        marker.rotation.y = LANE_ANGLE + (sign < 0 ? Math.PI : 0);
+        marker.scale.set(scale, 1, scale);
+        this.fx.add(marker);
+      }
+    }
   }
 
   private refreshPoints() {
@@ -958,9 +1008,15 @@ export class World {
 
   key(key: string, down: boolean) {
     if (down) {
+      // A step fires once per press (a swipe is one gesture); holding the key never repeats it.
+      const first = !this.keys.has(key);
       this.keys.add(key);
       this.target = [];
       this.pending = null;
+      if (first) {
+        if (key === "a" || key === "ArrowLeft") this.shiftLane(-1);
+        else if (key === "d" || key === "ArrowRight") this.shiftLane(1);
+      }
     } else this.keys.delete(key);
   }
   pad(x: number, y: number) {
@@ -969,6 +1025,20 @@ export class World {
       this.target = [];
       this.pending = null;
     }
+    // The stick's left/right is edge-triggered too: crossing out past the deadzone steps a
+    // lane once, and it has to come back near centre before it can fire again.
+    if (this.padLaneArmed && Math.abs(x) > 0.6) {
+      this.shiftLane(x > 0 ? 1 : -1);
+      this.padLaneArmed = false;
+    } else if (Math.abs(x) < 0.25) this.padLaneArmed = true;
+  }
+  private shiftLane(dir: -1 | 1) {
+    if (!this.active || !this.player) return;
+    const next = clampLane(this.laneIndex + dir);
+    if (next === this.laneIndex) return;
+    this.laneIndex = next;
+    this.laneLean = dir * 0.26;
+    this.laneSettled = false;
   }
   clearInput() {
     this.keys.clear();
@@ -977,6 +1047,7 @@ export class World {
     this.pending = null;
     this.walking = false;
     this.press = undefined;
+    this.padLaneArmed = true;
   }
 
   private path(x: number, z: number) {
@@ -1311,12 +1382,27 @@ export class World {
     this.clock += dt;
     this.waterTime.value = this.clock;
     if (!this.active || !this.player) return;
-    const sx =
-      this.touch.x + (this.keys.has("d") || this.keys.has("ArrowRight") ? 1 : 0) - (this.keys.has("a") || this.keys.has("ArrowLeft") ? 1 : 0);
+    // Forward/back stays a continuous, analog walk (this is a talk-to-anyone story game, not
+    // an auto-runner); left/right is lane-stepped (see docs/SUBWAY_LANES_PLAN.md: shiftLane()
+    // moves this.laneIndex on a keydown/swipe edge, and every frame eases the player's position
+    // along the lane axis towards that lane while this tween does the easing).
+    // a baby scoots and an older body jogs gently; their legs set the pace (see gait.ts)
+    const speed = this.speed * (this.player.baby ? 0.3 : this.player.energy < 1 ? 0.85 : 1);
     const sy = this.touch.y + (this.keys.has("s") || this.keys.has("ArrowDown") ? 1 : 0) - (this.keys.has("w") || this.keys.has("ArrowUp") ? 1 : 0);
-    const direction = new T.Vector3(sx * 0.874 + sy * 0.486, 0, -sx * 0.486 + sy * 0.874);
+    const laneTarget = LANES[this.laneIndex];
+    const laneError = laneTarget - laneScalar(this.playerPosition.x, this.playerPosition.z);
+    if (Math.abs(laneError) < 1e-3) this.laneSettled = true;
+    // Steer manually while a key/the stick is actually held, or a lane-step is still tweening
+    // in; otherwise idle tap-to-walk must never be fought by lane maths (most positions — a
+    // spawn point, an NPC you clicked towards — simply aren't exactly on a lane line).
+    const manualHeld =
+      Math.abs(sy) > 1e-6 ||
+      this.keys.has("a") || this.keys.has("d") || this.keys.has("ArrowLeft") || this.keys.has("ArrowRight") ||
+      Math.abs(this.touch.x) > 0.08 || Math.abs(this.touch.y) > 0.08;
+    const steering = manualHeld || !this.laneSettled;
+    const direction = new T.Vector3();
     let routeDistance = Infinity;
-    if (direction.lengthSq() === 0 && this.target.length) {
+    if (!steering && this.target.length) {
       direction.subVectors(this.target[0], this.playerPosition);
       direction.y = 0;
       routeDistance = direction.length();
@@ -1324,14 +1410,20 @@ export class World {
         this.target.shift();
         direction.set(0, 0, 0);
       }
+    } else if (steering) {
+      // a brisk, capped lateral step (snappier than the walk speed, like a dodge) plus free
+      // forward/back; composed along the screen-aligned RIGHT/AWAY axes, not raw world x/z
+      const lateralSpeed = speed * 2.2;
+      const lateralStep = Math.max(-lateralSpeed * dt, Math.min(lateralSpeed * dt, laneError));
+      direction.addScaledVector(RIGHT, lateralStep).addScaledVector(AWAY, -sy * speed * dt);
+      routeDistance = Infinity; // direction is already the exact frame step, not a unit vector
     }
     const beforeX = this.playerPosition.x,
       beforeZ = this.playerPosition.z;
     if (direction.lengthSq() > 1e-6) {
-      direction.normalize();
-      // a baby scoots and an older body jogs gently; their legs set the pace (see gait.ts)
-      const speed = this.speed * (this.player.baby ? 0.3 : this.player.energy < 1 ? 0.85 : 1);
-      const amount = Math.min(speed * dt, routeDistance);
+      const fromRoute = !steering;
+      if (fromRoute) direction.normalize();
+      const amount = fromRoute ? Math.min(speed * dt, routeDistance) : 1;
       const x = this.playerPosition.x + direction.x * amount,
         z = this.playerPosition.z + direction.z * amount;
       if (clearSegment(this.playerPosition, { x, z }, this.colliders)) {
@@ -1341,10 +1433,15 @@ export class World {
         if (clearSegment(this.playerPosition, { x, z: this.playerPosition.z }, this.colliders)) this.playerPosition.x = x;
         if (clearSegment(this.playerPosition, { x: this.playerPosition.x, z }, this.colliders)) this.playerPosition.z = z;
       }
-      const angle = Math.atan2(direction.x, direction.z),
-        current = this.player.root.rotation.y;
-      this.player.root.rotation.y = current + Math.atan2(Math.sin(angle - current), Math.cos(angle - current)) * Math.min(1, dt * 12);
+      // A pure lane-step (no forward/back held) reads as a sideways slide, not a spin in place.
+      if (fromRoute || Math.abs(sy) > 1e-6) {
+        const angle = Math.atan2(direction.x, direction.z),
+          current = this.player.root.rotation.y;
+        this.player.root.rotation.y = current + Math.atan2(Math.sin(angle - current), Math.cos(angle - current)) * Math.min(1, dt * 12);
+      }
     }
+    this.laneLean = T.MathUtils.damp(this.laneLean, 0, 6, dt);
+    this.player.root.rotation.z = this.laneLean;
     const traveled = Math.hypot(this.playerPosition.x - beforeX, this.playerPosition.z - beforeZ);
     this.walking = traveled > 1e-5;
     const pw = this.player.walk;
@@ -1877,6 +1974,7 @@ export class World {
       drawCalls: this.renderer.info.render.calls,
       triangles: this.renderer.info.render.triangles,
       position: { x: this.playerPosition.x, z: this.playerPosition.z },
+      lane: this.laneIndex,
       models: [...this.models.keys()],
       actors: this.actors.map((a) => a.who),
       points: this.points.map((p) => p.place.id),

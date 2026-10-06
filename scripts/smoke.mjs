@@ -460,6 +460,39 @@ for (const [code, pattern, chapterTitle] of [
   await page.close();
 }
 
+// ---------------------------------------------------------------------------
+// 6. Kitehaven 1.4: lane-stepping (docs/SUBWAY_LANES_PLAN.md)
+// ---------------------------------------------------------------------------
+{
+  const page = await open({ save: lifeTo(3) });
+  await continueSaved(page);
+  const lane = () => page.evaluate(() => window.lifeDiagnostics.render.lane);
+  const before = await lane();
+  // a swipe is one gesture: holding the key must step exactly once, not repeat
+  await page.keyboard.down("d");
+  await page.waitForTimeout(900);
+  const afterHold = await lane();
+  await page.keyboard.up("d");
+  assert.equal(afterHold, before + 1, `one held "d" press steps exactly one lane (${before} → ${afterHold})`);
+  // and a tap back returns it, with no residual repeat
+  await page.waitForTimeout(150);
+  await page.keyboard.press("a");
+  await page.waitForTimeout(500);
+  assert.equal(await lane(), before, "a tap of the opposite key steps back");
+  // forward/back is untouched: held "w" still covers real, continuous distance
+  const pos0 = (await diag(page)).render.position;
+  await page.keyboard.down("w");
+  await page.waitForTimeout(900);
+  await page.keyboard.up("w");
+  const pos1 = (await diag(page)).render.position;
+  assert.ok(Math.hypot(pos1.x - pos0.x, pos1.z - pos0.z) > 0.8, "holding w still walks forward continuously");
+  // tap-to-walk (pathfinding) still reaches an NPC exactly, unfought by the lane tween
+  await travel(page, "person:rowan");
+  await panel(page, "moment");
+  check("lane-stepping: A/D step one lane per gesture, W/S stays continuous, tap-to-walk still works");
+  await page.close();
+}
+
 await browser.close();
 await writeFile("docs/smoke-result.json", JSON.stringify({ at: new Date().toISOString(), base, checks, errors: [...new Set(errors)] }, null, 2));
 if (errors.length) {

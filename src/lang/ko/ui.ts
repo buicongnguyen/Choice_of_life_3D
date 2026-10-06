@@ -82,7 +82,7 @@ const ui: Record<UIKey, string> = {
   "brief.skip": "건너뛰기",
   "brief.continue": "계속 ▸",
   "brief.tipsLabel": "플레이 방법",
-  "brief.tip1": "<kbd>WASD</kbd> 또는 화면을 탭해서 걷기",
+  "brief.tip1": "<kbd>W</kbd>/<kbd>S</kbd> 걷기 · <kbd>A</kbd>/<kbd>D</kbd> 차선 바꾸기, 또는 탭해서 걷기",
   "brief.tip2": "<kbd>E</kbd> 대화 / 행동",
   "brief.tip3": "<b>!</b> 이야기 · <b>…</b> 한 시간 소요 · <b>✦</b> 활동",
   "brief.tip4": "고리는 무료로 얻는 발견이에요 — 위로 걸어가 보세요",
@@ -222,7 +222,7 @@ const ui: Record<UIKey, string> = {
   "pause.resume": "계속하기",
   "pause.readCard": "장 소개 다시 읽기",
   "pause.title2": "저장하고 타이틀로",
-  "pause.help": "이동: WASD / 방향키 · 행동: E 또는 스페이스 · 다음 대사: 스페이스 또는 엔터 · 선택: 1–5 · 일기장: J · 일시 정지: Esc<br>터치: 패드를 쓰거나, 가고 싶은 곳을 탭하세요.",
+  "pause.help": "걷기: W/S 또는 방향키 · 차선: A/D 또는 ←/→ · 행동: E 또는 스페이스 · 다음 대사: 스페이스 또는 엔터 · 선택: 1–5 · 일기장: J · 일시 정지: Esc<br>터치: 스틱을 쓰거나, 가고 싶은 곳을 탭하세요.",
   // restart
   "restart.title": "새 인생을 시작할까요?",
   "restart.body": "새 인생이 시작되면 지금의 인생은 사라져요.",

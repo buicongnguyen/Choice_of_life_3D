@@ -471,3 +471,54 @@ two or more contacts always down, nothing below the floor. `src/gait.test.ts` ad
 - no blend amount pushes a limb through the floor;
 - a sitting baby is exactly the authored pose.
 
+## 11. 1.4.0: lane-stepping, adapted from Subway Surfers
+
+The user asked for Subway Surfers' left/right movement, since "the game is difficult to
+observe." The full write-up — what was researched, what was kept, what was deliberately left
+out, and why — is [docs/SUBWAY_LANES_PLAN.md](SUBWAY_LANES_PLAN.md). In short: this stays a
+talk-to-anyone story game (no auto-run, no fail-on-collision, no coins), but **A/D or ←/→ now
+step one lane at a time**, like a swipe, while **W/S stays a free, continuous walk** exactly as
+before. Clicking or tapping the ground still free-roams precisely, unconstrained by lanes.
+
+- **Lanes are screen-relative** (`src/navigation.ts`: `LANES`, five of them, evenly spaced),
+  built along the camera's fixed screen-right axis (`world.ts`'s existing `RIGHT`/`AWAY`), so
+  they read as straight parallel tracks receding into the distance under the isometric camera,
+  not as a diagonal band in raw world coordinates.
+- **A step is a gesture, not a hold.** `key()`/`pad()` edge-detect the press (down-edge for
+  keys, a threshold-crossing with hysteresis for the stick), so holding the key doesn't repeat
+  it — matching a real swipe, and keeping exploration from turning into a blur.
+- **The lane position is a soft target, not a rail.** Every frame eases the player towards the
+  current lane along the lane axis at a brisk, capped speed (faster than the walk speed, so it
+  reads as a dodge), composed with the free forward/back input. A `laneSettled` flag (false only
+  while that tween is still running) keeps this from ever fighting tap-to-walk: most positions
+  — a spawn point, a clicked destination — simply aren't exactly on a lane line, and that must
+  never be read as "still steering."
+- **Visual guides** (`art/kitehaven/scenes.py` → the shared `props` pack, two new nodes,
+  `Prop_lane_track` and `Prop_lane_marker`, one draw call each): a dashed glowing line per lane
+  with small chevrons at its ends, laid out and rotated to match the lane maths exactly. Smaller
+  rooms get fewer (3, not 5) and smaller guides. *Known limitation:* in rooms whose floor is a
+  similarly warm honey colour (the nursery, chapter 1), the glow nearly disappears against the
+  wood — a colour, not a geometry, problem, left for a follow-up pass.
+- **A small lean** (`player.root.rotation.z`, decaying) on each step, for a bit of the genre's
+  signature juice, without touching the camera.
+
+Verified: `src/lanes.test.ts` (lane spacing/centring, nearest-lane lookup, clamping) and a
+scripted functional check (one press of a held key steps exactly one lane; forward/back still
+covers real continuous distance while held). `scripts/gait-probe.mjs` switched from driving the
+probe with a held "d" (now a single step) to a held "w"/"s", and still measures 0% slip. All 51
+unit tests, the full 19-check Playwright smoke suite (unaffected flows — talk, discover, hunt,
+activities, exits, phone layout, language switching — all still use tap-to-walk), and the
+production build pass; `scripts/perf.mjs` shows no change to frame time (60 fps, ~15–20 extra
+draw calls per scene for the guides).
+
+**Found and fixed during verification:** an early version of the frame step reused
+`this.speed` directly for both the lateral cap and the forward term in the lane branch, instead
+of the already-age-adjusted `speed` (the baby's 0.3× and an elder's 0.85× multiplier) — it took
+the baby from its measured 0.87 units/s crawl back up to full adult speed. Caught by rerunning
+`gait-probe.mjs` with the new forward-driving input; fixed by computing `speed` once, before
+building the direction vector, and using it everywhere movement happens. A second version
+conflated "the player's lane-position error is nonzero" (true almost everywhere — a spawn point
+or a clicked destination is essentially never exactly on a lane line) with "the player is
+actively steering," which silently broke tap-to-walk for the rest of the chapter the moment the
+error failed to reach zero (furniture, a blocked diagonal). Caught by the smoke suite's "walk to
+Nana June" check timing out; fixed with the `laneSettled` flag described above.

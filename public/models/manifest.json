@@ -70,9 +70,9 @@
       "meshes": 13
     },
     "props": {
-      "bytes": 180536,
-      "triangles": 19476,
-      "meshes": 50
+      "bytes": 183404,
+      "triangles": 19668,
+      "meshes": 52
     },
     "baby": {
       "bytes": 49056,
@@ -162,9 +162,9 @@
       "meshes": 13
     },
     "props": {
-      "bytes": 121096,
-      "triangles": 7548,
-      "meshes": 50
+      "bytes": 123492,
+      "triangles": 7644,
+      "meshes": 52
     },
     "baby": {
       "bytes": 33820,
@@ -188,7 +188,7 @@
     }
   },
   "totals": {
-    "full": 5622736,
-    "low": 3313952
+    "full": 5625604,
+    "low": 3316348
   }
 }

@@ -90,7 +90,7 @@ export const EN_UI = {
   "brief.skip": "Skip",
   "brief.continue": "Continue ▸",
   "brief.tipsLabel": "How to play",
-  "brief.tip1": "<kbd>WASD</kbd> or tap to walk",
+  "brief.tip1": "<kbd>W</kbd>/<kbd>S</kbd> walk · <kbd>A</kbd>/<kbd>D</kbd> change lane, or tap to walk",
   "brief.tip2": "<kbd>E</kbd> talk / act",
   "brief.tip3": "<b>!</b> story · <b>…</b> costs an hour · <b>✦</b> activity",
   "brief.tip4": "Rings are free finds — walk over them",
@@ -231,7 +231,7 @@ export const EN_UI = {
   "pause.resume": "Resume",
   "pause.readCard": "Read the chapter card",
   "pause.title2": "Save and return to title",
-  "pause.help": "Move: WASD / arrows · Act: E or Space · Next line: Space or Enter · Choose: 1–5 · Journal: J · Pause: Esc<br>Touch: use the pad, or tap anywhere to walk there.",
+  "pause.help": "Walk: W/S or arrows · Lane: A/D or ←/→ · Act: E or Space · Next line: Space or Enter · Choose: 1–5 · Journal: J · Pause: Esc<br>Touch: use the stick, or tap anywhere to walk there.",
   // restart
   "restart.title": "Begin a new life?",
   "restart.body": "Your current life will be replaced when the new one begins.",

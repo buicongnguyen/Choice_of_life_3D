@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-01T08:07:15.567Z",
+  "at": "2026-10-06T06:11:00.277Z",
   "base": "http://127.0.0.1:4263/",
   "checks": [
     "title: settings switches, and the customise sheet",
@@ -20,7 +20,8 @@
     "kite workshop: earned patterns, a second colour, saved; paths show the big choices",
     "fireworks, the ending, the picture card and the album of lives",
     "Vietnamese: title, chapter card, choices and journal translated; switching language keeps the life",
-    "Korean: title, chapter card, choices and journal translated; switching language keeps the life"
+    "Korean: title, chapter card, choices and journal translated; switching language keeps the life",
+    "lane-stepping: A/D step one lane per gesture, W/S stays continuous, tap-to-walk still works"
   ],
   "errors": []
 }
