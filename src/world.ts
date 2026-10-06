@@ -575,7 +575,6 @@ export class World {
     this.runView = new RunView(host as never, plan, kit, this.player, crew as never, pLook.kind);
     this.runView.onEvent = onEvent;
     this.camTarget.set(0, 1, -10);
-    this.addWeather(chapter.env, seasonOf(state.chapter), true);
     this.resize();
   }
   runInput(cmd: "left" | "right" | "jump" | "slide" | "go", gate?: number) {

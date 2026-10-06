@@ -317,8 +317,8 @@ export function runEffect(coins: number, sparks: number, hearts: number, stumble
   if (health) e.health = health;
   return e;
 }
-/** A run is the way into a chapter's big choice: once per chapter, before it's made. */
-export const canRun = (l: Life) => !l.complete && !mainDone(l) && !l.facts[`run${l.chapter}`];
+/** A run is the way into a chapter's big choice; its haul is logged once per chapter, right after the choice. */
+export const canRun = (l: Life) => !l.complete && !l.facts[`run${l.chapter}`];
 
 function run(l: Life, counts: string, who: string): Life | null {
   const m = /^(\d{1,3})-(\d{1,3})-(\d{1,2})-([0-3])$/.exec(counts);

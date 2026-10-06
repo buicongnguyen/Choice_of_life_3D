@@ -147,7 +147,7 @@ function chapter(n: number): Life {
   return l;
 }
 
-test("a run is logged once per chapter, before the big choice, with a bounded haul", () => {
+test("a run's haul is logged once per chapter, after the choice made at its gate, and bounded", () => {
   const l = chapter(3);
   assert.ok(canRun(l));
   const friend = castOf(l).map(([w]) => w).find((w) => w === "rowan")!;
@@ -157,10 +157,9 @@ test("a run is logged once per chapter, before the big choice, with a bounded ha
   assert.deepEqual(a.memories.at(-1)!.effect, { savings: 4, joy: 3 });
   assert.ok(a.memories.at(-1)!.tended!.includes("rowan"), "a high-five tends the bond");
   assert.equal(act(a, "run:1-1-1-0:"), a, "only once a chapter");
-  const m = mainMoment(a);
-  const chosen = act(a, talkAction(m.id, 0));
-  assert.notEqual(chosen, a, "the choice follows the run");
-  assert.ok(!canRun(chapter(3).memories.length ? act(chapter(3), talkAction(mainMoment(chapter(3)).id, 0)) : l), "no run after the choice is made");
+  const chosen = act(l, talkAction(mainMoment(l).id, 0));
+  assert.ok(canRun(chosen), "the haul follows the choice made at the gate");
+  assert.notEqual(act(chosen, "run:1-1-1-0:rowan"), chosen);
   for (const bad of ["run:999-0-0-0:", "run:1-1-1-4:", "run:1-1-1-0:nobody", "run:1-1-1-0:rowan,rowan", "run:x:"]) assert.equal(act(l, bad), l, bad);
   assert.deepEqual(runEffect(1000, 1000, 0, 0), { savings: 8, joy: 6 });
   assert.deepEqual(runEffect(0, 0, 0, 3), { health: -4 });

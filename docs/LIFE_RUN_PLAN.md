@@ -72,7 +72,7 @@ are all still there.
 - **Hit:** costs one stumble, gives 1.2 s of invulnerability and a brief slowdown. The third
   stumble makes you *winded*: obstacles ahead are cleared and you jog.
 - **Result:** one logged action, `run:<coins>-<sparks>-<hearts>-<stumbles>:<who,…>`. It's
-  allowed once per chapter, before the big choice. All values are bounded so a hand-edited
+  allowed once per chapter and logged right after the choice made at the gate (so the gates are judged against the same life they showed). All values are bounded so a hand-edited
   save can't mint stats.
   - Savings: ⌊coins/5⌋, up to 8.
   - Joy: ⌊sparks/3⌋, up to 6.

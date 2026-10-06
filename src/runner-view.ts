@@ -66,14 +66,17 @@ export class RunView {
     this.run = new Run(plan);
     host.root.add(this.group);
     // pickups glow a little so they read in shade and at a distance, as in the genre
+    // (materials in the GLB are shared by name, so each pickup gets its own copy, made once per kit)
     for (const [name, hex] of [["coin", 0x9a6200], ["spark", 0x8a7a00], ["heart", 0x7a1030]] as const)
       kit.getObjectByName(`Run_${name}`)?.traverse((o) => {
-        const m = (o as T.Mesh).material as T.MeshStandardMaterial | undefined;
-        if (m && "emissive" in m && !m.userData.runGlow) {
+        if (!(o instanceof T.Mesh) || o.userData.runGlow) return;
+        const m = (o.material as T.MeshStandardMaterial).clone();
+        if ("emissive" in m) {
           m.emissive.setHex(hex);
           m.emissiveIntensity = 0.55;
-          m.userData.runGlow = true;
         }
+        o.material = m;
+        o.userData.runGlow = true;
       });
     // the street: recycled tiles with their dressing
     const n = host.low ? 8 : 10;
@@ -419,10 +422,10 @@ export class RunView {
   }
 
   dispose() {
+    // the runner, friends and street stay in the host's scene root, which World.reset() releases
+    // (detaching them first would leak their recoloured materials)
     for (const b of this.bursts) for (const sp of b.pts) sp.material.dispose();
-    this.player.root.removeFromParent();
-    for (const f of this.friends.values()) f.root.removeFromParent();
-    this.group.removeFromParent();
+    this.bursts = [];
   }
 
   diagnostics() {

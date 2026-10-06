@@ -504,8 +504,8 @@ for (const [code, pattern, chapterTitle] of [
   await panel(page, "response");
   await ready(page);
   const s = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)), core.SAVE_KEY);
-  assert.match(s.log.at(-2), /^run:\d+-\d+-\d+-[0-3]:/, "the run is logged");
-  assert.match(s.log.at(-1), /^talk:c4\.race:\d$/, "then the choice made at the gate");
+  assert.match(s.log.at(-2), /^talk:c4\.race:\d$/, "the choice made at the gate");
+  assert.match(s.log.at(-1), /^run:\d+-\d+-\d+-[0-3]:/, "then the run's haul");
   assert.equal((await diag(page)).render.run, null, "back in the diorama");
   await closePanel(page);
   assert.ok((await diag(page)).render.points.includes("exit"), "the golden gate is open");

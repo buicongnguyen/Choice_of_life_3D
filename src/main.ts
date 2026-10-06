@@ -245,7 +245,7 @@ function panelUI() {
   if (panel === "moment" && activeMoment) return momentUI(state, activeMoment, beat);
   if (panel === "response") return responseUI(response.title, beat, response.text, response.effect, state, response.note, response.who);
   if (panel === "activity") return activityUI(state, { active: !!kite, assist: kiteAssist });
-  if (panel === "briefing") return briefingUI(state, firstBriefing && state.chapter === 0, beat, briefingReopened, !briefingReopened && canRun(state));
+  if (panel === "briefing") return briefingUI(state, firstBriefing && state.chapter === 0, beat, briefingReopened, !briefingReopened && canRun(state) && !mainDone(state));
   if (panel === "run") return runHudUI();
   if (panel === "explore") return exploreUI(world.places(), chapterOf(state).free > 50);
   if (panel === "journal") return journalUI(state, journalTab, album, kiteHint);
@@ -686,7 +686,7 @@ function runHudUI() {
 }
 
 async function startRun() {
-  if (!canRun(state) || busy || world.running) return;
+  if (!canRun(state) || mainDone(state) || busy || world.running) return;
   const ch = chapterOf(state);
   // the people you love are out on the street: run past them for a high-five
   const friends = castOf(state)
@@ -792,8 +792,6 @@ async function finishRun(choice: number) {
   const result = world.runResult();
   cancelAnimationFrame(runFrame);
   world.endRun();
-  if (result) perform(runAction(result));
-  const haul = result ? state.memories.at(-1) : undefined;
   panel = "none";
   loading = true;
   render();
@@ -809,6 +807,12 @@ async function finishRun(choice: number) {
   activeMoment = main;
   focusId = world.placeOf(resolveWho(main.who, state)) ?? null;
   choose(choice);
+  if (!mainDone(state)) {
+    // the gate couldn't be taken after all: ask in person instead of leaving you with nothing open
+    openMoment(main, focusId ?? "");
+    return;
+  }
+  const haul = result && perform(runAction(result)) ? state.memories.at(-1) : undefined;
   if (haul?.id.startsWith("r:") && result) {
     toast(`<b>${esc(haul.title)}</b> <span class="chips inline">${chips(haul.effect, state)}</span><br><small>${esc(u("run.haul", { coins: result.coins, sparks: result.sparks, hearts: result.hearts }))}</small>`, 4200);
     popRewards(haul.effect);
@@ -1281,6 +1285,8 @@ window.addEventListener("keydown", (event) => {
   }
   if (panel === "run" && !loading) {
     const k = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+    // Enter/Space on a focused button (a gate card, Pause) presses that button
+    if ((k === " " || k === "Enter") && event.target instanceof HTMLButtonElement) return;
     if (/^[1-5]$/.test(k) && runPhase() === "crossroads") {
       event.preventDefault();
       world.runInput("go", Number(k) - 1);
