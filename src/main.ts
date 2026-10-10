@@ -1,3 +1,4 @@
+import './mobile-game-init.mjs';
 import "./style.css";
 import "./conversation.css";
 import "./features.css";
@@ -1326,6 +1327,8 @@ function suspend() {
   }
 }
 window.addEventListener("blur", suspend);
+window.addEventListener('pagehide', suspend);
+window.addEventListener('mobile-game-interruption', suspend);
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) suspend();
 });

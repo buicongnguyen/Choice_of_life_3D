@@ -42,6 +42,8 @@ export class KiteGame {
     window.addEventListener("keydown", this.key);
     window.addEventListener("keyup", this.key);
     window.addEventListener("blur", this.pause);
+window.addEventListener('pagehide', this.pause);
+window.addEventListener('mobile-game-interruption', this.pause);
     window.addEventListener("focus", this.resume);
     document.addEventListener("visibilitychange", this.visibility);
     if (document.hidden || !document.hasFocus()) this.pause();
@@ -268,6 +270,8 @@ export class KiteGame {
     window.removeEventListener("keydown", this.key);
     window.removeEventListener("keyup", this.key);
     window.removeEventListener("blur", this.pause);
+    window.removeEventListener('pagehide', this.pause);
+    window.removeEventListener('mobile-game-interruption', this.pause);
     window.removeEventListener("focus", this.resume);
     document.removeEventListener("visibilitychange", this.visibility);
   }
