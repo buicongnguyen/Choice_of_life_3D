@@ -20,7 +20,7 @@ import { buildKite, kiteLook, lookOf, type KiteLook } from "./kite-art";
 import { FIREWORKS, TOWN_TOPS, WALKERS, seasonOf, type Season } from "./town";
 import type { Mood } from "./moods";
 import { crawlCycle, crawlPose, cycleLength, gaitPose, gaitShape, type CrawlRig } from "./gait";
-import { RunView } from "./runner-view";
+import { RunView, type RunHost } from "./runner-view";
 import type { RunEvent, RunPlan } from "./runner-core";
 import { activeColliders, clearSegment, findPath, free, recoverPosition, withinPickup, approach, navigation, type Collider, type SceneLayout } from "./navigation";
 
@@ -563,16 +563,17 @@ export class World {
     if (this.bloom) this.bloom.strength = this.stage.preset.bloom;
     this.player = this.makeActor(bodies[pLook.kind], pLook, "you", this.kiteHex(state));
     const crew = new Map(friends.map((who, i) => [who, this.makeActor(bodies[looks[i].kind], looks[i], who)] as const));
-    const host = {
+    const host: RunHost = {
       root: this.sceneRoot,
       camera: this.camera,
-      animate: (a: Actor, moving: boolean, t: number, dt: number) => this.animateActor(a, moving, t, dt),
+      // the view only ever hands back the actors made here
+      animate: (a, moving, t, dt) => this.animateActor(a as Actor, moving, t, dt),
       reduced: () => this.reducedMotion,
       low: this.graphics.low,
       font: canvasFont,
       spark: sparkTexture,
     };
-    this.runView = new RunView(host as never, plan, kit, this.player, crew as never, pLook.kind);
+    this.runView = new RunView(host, plan, kit, this.player, crew, pLook.kind);
     this.runView.onEvent = onEvent;
     this.camTarget.set(0, 1, -10);
     this.resize();

@@ -11,7 +11,6 @@ import {
   text,
   resolveWho,
   partnered,
-  partnerName,
   lexicon,
   type ArchetypeKey,
   type BondKey,
